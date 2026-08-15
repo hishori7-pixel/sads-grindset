@@ -876,11 +876,12 @@ const Analytics = ({ state }) => {
 };
 
 // ==========================================
-// MODULE 3: SURVIVAL HEATMAP (ROLLING 40-WEEK MATRIX)
+// MODULE 3: SURVIVAL HEATMAP (ACADEMIC ROADMAP & MATRIX)
 // ==========================================
 const SurvivalHeatmap = ({ state }) => {
   const [selectedCell, setSelectedCell] = useState(null);
-  const totalDays = 280; // 40 weeks
+  const [viewMode, setViewMode] = useState('future'); // 'future' | 'past'
+  const totalDays = 280; // 40 weeks (~9.5 months)
   
   const dateMap = useMemo(() => {
     const map = {};
@@ -892,34 +893,88 @@ const SurvivalHeatmap = ({ state }) => {
     return map;
   }, [state.sessions]);
 
+  // Map of future scheduled reviews
+  const futureSrMap = useMemo(() => {
+    const map = {};
+    state.topics.forEach(t => {
+      if (t.nextReview) {
+        map[t.nextReview] = (map[t.nextReview] || 0) + 1;
+      }
+    });
+    return map;
+  }, [state.topics]);
+
   const grid = useMemo(() => {
     const cells = [];
-    for (let i = totalDays - 1; i >= 0; i--) {
-      const dStr = addDays(TODAY_STR, -i);
-      const data = dateMap[dStr] || { hours: 0, subjects: {} };
-      
-      let topSubject = 'None';
-      let maxTime = 0;
-      Object.entries(data.subjects).forEach(([sub, time]) => {
-        if (time > maxTime) { maxTime = time; topSubject = sub; }
-      });
+    
+    if (viewMode === 'future') {
+      // START FROM TODAY -> 280 DAYS IN THE FUTURE
+      for (let i = 0; i < totalDays; i++) {
+        const dStr = addDays(TODAY_STR, i);
+        const data = dateMap[dStr] || { hours: 0, subjects: {} };
+        const scheduledCount = futureSrMap[dStr] || 0;
+        const isToday = i === 0;
+        
+        let topSubject = 'None';
+        let maxTime = 0;
+        Object.entries(data.subjects).forEach(([sub, time]) => {
+          if (time > maxTime) { maxTime = time; topSubject = sub; }
+        });
 
-      let bgClass = 'bg-zinc-900/90 border-zinc-800/40';
-      if (data.hours > 0 && data.hours < 1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
-      else if (data.hours >= 1 && data.hours < 2.5) bgClass = 'bg-emerald-900 border-emerald-700/60';
-      else if (data.hours >= 2.5 && data.hours < 4.5) bgClass = 'bg-emerald-700 border-emerald-500/60';
-      else if (data.hours >= 4.5 && data.hours < 6) bgClass = 'bg-emerald-500 border-emerald-400/80';
-      else if (data.hours >= 6) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
+        let bgClass = 'bg-zinc-900/90 border-zinc-800/40';
+        if (isToday) bgClass = 'bg-emerald-950/90 border-emerald-400 ring-1 ring-emerald-400/60';
+        else if (data.hours > 0 && data.hours < 1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
+        else if (data.hours >= 1 && data.hours < 2.5) bgClass = 'bg-emerald-900 border-emerald-700/60';
+        else if (data.hours >= 2.5 && data.hours < 4.5) bgClass = 'bg-emerald-700 border-emerald-500/60';
+        else if (data.hours >= 4.5 && data.hours < 6) bgClass = 'bg-emerald-500 border-emerald-400/80';
+        else if (data.hours >= 6) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
+        else if (scheduledCount > 0) bgClass = 'bg-cyan-950/50 border-cyan-500/40';
 
-      cells.push({
-        date: dStr,
-        hours: data.hours,
-        topSubject,
-        bgClass
-      });
+        cells.push({
+          date: dStr,
+          hours: data.hours,
+          topSubject,
+          scheduledCount,
+          isToday,
+          isFuture: i > 0,
+          bgClass
+        });
+      }
+    } else {
+      // 280 DAYS IN THE PAST -> TODAY
+      for (let i = totalDays - 1; i >= 0; i--) {
+        const dStr = addDays(TODAY_STR, -i);
+        const data = dateMap[dStr] || { hours: 0, subjects: {} };
+        const isToday = i === 0;
+        
+        let topSubject = 'None';
+        let maxTime = 0;
+        Object.entries(data.subjects).forEach(([sub, time]) => {
+          if (time > maxTime) { maxTime = time; topSubject = sub; }
+        });
+
+        let bgClass = 'bg-zinc-900/90 border-zinc-800/40';
+        if (isToday) bgClass = 'bg-emerald-950/90 border-emerald-400 ring-1 ring-emerald-400/60';
+        else if (data.hours > 0 && data.hours < 1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
+        else if (data.hours >= 1 && data.hours < 2.5) bgClass = 'bg-emerald-900 border-emerald-700/60';
+        else if (data.hours >= 2.5 && data.hours < 4.5) bgClass = 'bg-emerald-700 border-emerald-500/60';
+        else if (data.hours >= 4.5 && data.hours < 6) bgClass = 'bg-emerald-500 border-emerald-400/80';
+        else if (data.hours >= 6) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
+
+        cells.push({
+          date: dStr,
+          hours: data.hours,
+          topSubject,
+          scheduledCount: 0,
+          isToday,
+          isFuture: false,
+          bgClass
+        });
+      }
     }
+
     return cells;
-  }, [dateMap]);
+  }, [dateMap, futureSrMap, viewMode]);
 
   const cols = 40;
   const rows = 7;
@@ -938,15 +993,53 @@ const SurvivalHeatmap = ({ state }) => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in pb-28">
       
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 shadow-2xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/60 pb-4">
           <div>
             <h2 className="text-base font-bold text-zinc-100 flex items-center">
-              <Grid3x3 className="w-5 h-5 mr-2 text-emerald-400"/> Survival Contribution Heatmap
+              <Grid3x3 className="w-5 h-5 mr-2 text-emerald-400"/> 
+              {viewMode === 'future' ? 'Future Academic Roadmap (40 Weeks)' : 'Past Consistency Matrix (40 Weeks)'}
             </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">Rolling 40-Week (280-Day) Academic Consistency Matrix.</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {viewMode === 'future' 
+                ? 'Looking forward: Academic journey starting from Today across your entire exam roadmap.' 
+                : 'Looking back: 280-day retrospective consistency log leading up to Today.'}
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
+
+          {/* Timeline View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-2xl border border-zinc-800 text-xs">
+            <button 
+              onClick={() => setViewMode('future')}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${viewMode === 'future' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Future Roadmap (Today →)
+            </button>
+            <button 
+              onClick={() => setViewMode('past')}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${viewMode === 'past' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Past History (← Today)
+            </button>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center justify-between text-xs text-zinc-500 flex-wrap gap-2">
+          <div className="flex items-center gap-3 font-mono text-[11px]">
+            <span className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-emerald-950 border border-emerald-400 ring-1 ring-emerald-400/60"></div>
+              <strong className="text-zinc-300">Today (Start)</strong>
+            </span>
+            {viewMode === 'future' && (
+              <span className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded bg-cyan-950/60 border border-cyan-500/40"></div>
+                <strong className="text-cyan-400">Scheduled Recall Date</strong>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
             <span>0h</span>
             <div className="w-3.5 h-3.5 rounded bg-zinc-900 border border-zinc-800"></div>
             <div className="w-3.5 h-3.5 rounded bg-emerald-950 border border-emerald-900"></div>
@@ -958,15 +1051,29 @@ const SurvivalHeatmap = ({ state }) => {
           </div>
         </div>
 
+        {/* Matrix Viewport */}
         <div className="overflow-x-auto pb-4">
           <div className="min-w-[860px]">
             
+            {/* Timeline Markers */}
             <div className="flex justify-between text-[11px] font-mono text-zinc-500 mb-3 pl-8 pr-2">
-              <span>9 Months Ago</span>
-              <span>6 Months Ago</span>
-              <span>3 Months Ago</span>
-              <span>1 Month Ago</span>
-              <span className="text-emerald-400 font-bold">Today</span>
+              {viewMode === 'future' ? (
+                <>
+                  <span className="text-emerald-400 font-bold">Today (Start)</span>
+                  <span>+1 Month</span>
+                  <span>+3 Months</span>
+                  <span>+6 Months</span>
+                  <span className="text-cyan-400 font-bold">+9 Months (Finals)</span>
+                </>
+              ) : (
+                <>
+                  <span>9 Months Ago</span>
+                  <span>6 Months Ago</span>
+                  <span>3 Months Ago</span>
+                  <span>1 Month Ago</span>
+                  <span className="text-emerald-400 font-bold">Today</span>
+                </>
+              )}
             </div>
 
             <div className="flex">
@@ -987,9 +1094,25 @@ const SurvivalHeatmap = ({ state }) => {
                         className={`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-[3px] border ${cell.bgClass} relative group cursor-pointer transition-transform hover:scale-135 hover:z-20`}
                       >
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 bg-zinc-950 text-zinc-200 text-xs p-2.5 rounded-xl shadow-2xl whitespace-nowrap border border-zinc-700 pointer-events-none">
-                          <div className="font-bold text-zinc-100">{cell.date}</div>
-                          <div className="text-emerald-400 font-mono font-semibold">{cell.hours.toFixed(1)} hours studied</div>
-                          <div className="text-zinc-400 text-[10px]">Top focus: {cell.topSubject}</div>
+                          <div className="font-bold text-zinc-100 flex items-center gap-1.5">
+                            <span>{cell.date}</span>
+                            {cell.isToday && <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">TODAY</span>}
+                          </div>
+                          {cell.hours > 0 ? (
+                            <div className="text-emerald-400 font-mono font-semibold">{cell.hours.toFixed(1)} hours studied</div>
+                          ) : cell.isFuture ? (
+                            <div className="text-zinc-400 font-mono">Upcoming study day</div>
+                          ) : (
+                            <div className="text-zinc-500 font-mono">0 hours logged</div>
+                          )}
+                          {cell.scheduledCount > 0 && (
+                            <div className="text-cyan-400 text-[10px] font-bold">
+                              🔔 {cell.scheduledCount} Spaced Recall Review{cell.scheduledCount === 1 ? '' : 's'} Due
+                            </div>
+                          )}
+                          {cell.topSubject !== 'None' && (
+                            <div className="text-zinc-400 text-[10px]">Top focus: {cell.topSubject}</div>
+                          )}
                         </div>
                       </div>
                     ) : <div key={cIdx} className="w-4 h-4"></div>)}
@@ -1002,14 +1125,29 @@ const SurvivalHeatmap = ({ state }) => {
         </div>
       </div>
 
+      {/* Selected Cell Preview */}
       {selectedCell && (
         <div className="bg-zinc-900/90 border border-emerald-500/40 rounded-2xl p-5 flex items-center justify-between shadow-2xl animate-scale-in">
           <div>
             <div className="text-xs text-zinc-500 uppercase font-mono">Day Detail Inspect</div>
-            <h3 className="text-lg font-bold text-zinc-100 mt-0.5">{selectedCell.date}</h3>
+            <h3 className="text-lg font-bold text-zinc-100 mt-0.5 flex items-center gap-2">
+              <span>{selectedCell.date}</span>
+              {selectedCell.isToday && (
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                  TODAY
+                </span>
+              )}
+            </h3>
             <div className="flex items-center gap-3 mt-2 text-sm">
-              <span className="font-mono text-emerald-400 font-bold">{selectedCell.hours.toFixed(1)} Hours Studied</span>
-              <span className="text-zinc-400">• Top: <strong className="text-zinc-200">{selectedCell.topSubject}</strong></span>
+              <span className="font-mono text-emerald-400 font-bold">
+                {selectedCell.hours > 0 ? `${selectedCell.hours.toFixed(1)} Hours Studied` : selectedCell.isFuture ? 'Future Roadmap Day' : '0 Hours'}
+              </span>
+              {selectedCell.scheduledCount > 0 && (
+                <span className="text-cyan-400 font-bold">• {selectedCell.scheduledCount} Spaced Recall Reviews</span>
+              )}
+              {selectedCell.topSubject !== 'None' && (
+                <span className="text-zinc-400">• Top: <strong className="text-zinc-200">{selectedCell.topSubject}</strong></span>
+              )}
             </div>
           </div>
           <button 
