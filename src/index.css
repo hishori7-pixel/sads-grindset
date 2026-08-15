@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --color-oled: #09090b;
+  --color-oled-pure: #000000;
+  --color-surface: #0a0a0f;
+  --color-surface-raised: #111118;
+  --color-surface-overlay: #18181f;
+  --color-border-subtle: #1e1e2a;
+  --color-neon-emerald: #10b981;
+  --color-neon-emerald-dim: #064e36;
+  --color-neon-violet: #8b5cf6;
+  --color-neon-violet-dim: #3b1f7e;
+  --color-neon-amber: #f59e0b;
+  --color-neon-amber-dim: #6b4106;
+  --color-neon-cyan: #06b6d4;
+  --color-neon-cyan-dim: #064d5c;
+  --color-neon-rose: #f43f5e;
+  --color-neon-rose-dim: #6b1728;
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #52525b;
+}
+
+/* === Scrollbar === */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+/* === Glow Keyframes === */
+@keyframes pulse-glow-emerald {
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 30px 6px rgba(16, 185, 129, 0.5); }
+}
+@keyframes pulse-glow-rose {
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(244, 63, 94, 0.3); }
+  50% { box-shadow: 0 0 30px 6px rgba(244, 63, 94, 0.5); }
+}
+@keyframes pulse-glow-violet {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(139, 92, 246, 0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.4); }
+}
+@keyframes pulse-glow-cyan {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(6, 182, 212, 0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(6, 182, 212, 0.4); }
+}
+@keyframes pulse-glow-amber {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(245, 158, 11, 0.4); }
+}
+@keyframes float-up {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -10px) scale(1.1); }
+  80% { opacity: 1; transform: translate(-50%, -35px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50px) scale(0.9); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in { animation: fade-in 0.25s ease-out; }
+.animate-scale-in { animation: scale-in 0.2s ease-out; }
+.animate-float-up { animation: float-up 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+.glow-emerald { animation: pulse-glow-emerald 2s ease-in-out infinite; }
+.glow-rose { animation: pulse-glow-rose 2s ease-in-out infinite; }
+.glow-violet { animation: pulse-glow-violet 2.5s ease-in-out infinite; }
+.glow-cyan { animation: pulse-glow-cyan 2.5s ease-in-out infinite; }
+.glow-amber { animation: pulse-glow-amber 2.5s ease-in-out infinite; }
+
+/* === Touch feedback === */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.touch-target:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+/* === Safe areas === */
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+}
