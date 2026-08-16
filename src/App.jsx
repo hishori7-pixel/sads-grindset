@@ -77,22 +77,35 @@ class SoundEngine {
 const soundEngine = new SoundEngine();
 
 // ==========================================
-// CLOUD SYNC ENGINE (6-DIGIT PIN & SUPABASE)
+// ==========================================
+// CLOUD SYNC ENGINE (6-DIGIT PIN, REST RELAY & SUPABASE)
 // ==========================================
 const SYNC_STORAGE_KEY = 'sads-grindset-sync-pin';
+const SYNC_OBJ_KEY = 'sads-grindset-cloud-obj-id';
 const SUPABASE_CONFIG_KEY = 'sads-grindset-supabase-cfg';
 
-// Free zero-friction cloud relay endpoint with PIN isolation
-const CLOUD_SYNC_ENDPOINT = 'https://kv.val.run';
-
 class CloudSyncManager {
+  static getStoredCloudId() {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(SYNC_OBJ_KEY) || '';
+    }
+    return '';
+  }
+
+  static setStoredCloudId(id) {
+    if (typeof window !== 'undefined' && id) {
+      localStorage.setItem(SYNC_OBJ_KEY, id);
+    }
+  }
+
   static async pushState(pin, stateData, customSupabase = null) {
     if (!pin || pin.trim().length < 4) return { success: false, error: 'Invalid PIN' };
+    const cleanPin = pin.trim();
 
     // 1. If custom Supabase configured
     if (customSupabase?.url && customSupabase?.anonKey) {
       try {
-        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(pin)}`, {
+        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(cleanPin)}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -101,41 +114,68 @@ class CloudSyncManager {
             'Prefer': 'resolution=merge-duplicates'
           },
           body: JSON.stringify({
-            pin,
+            pin: cleanPin,
             data: stateData,
             updated_at: new Date().toISOString()
           })
         });
         if (res.ok) return { success: true };
       } catch (e) {
-        console.warn('Supabase push error, falling back to relay', e);
+        console.warn('Supabase push error, falling back to REST relay', e);
       }
     }
 
-    // 2. Cloud Relay with PIN
+    // 2. High-Availability REST Cloud Relay
     try {
-      const response = await fetch(`${CLOUD_SYNC_ENDPOINT}/sads_grindset_${encodeURIComponent(pin.trim())}`, {
+      const storedId = this.getStoredCloudId();
+      const payload = {
+        name: `sads_sync_${cleanPin}`,
+        data: {
+          state: stateData,
+          pin: cleanPin,
+          updatedAt: Date.now()
+        }
+      };
+
+      if (storedId) {
+        // Update existing cloud object
+        const updateRes = await fetch(`https://api.restful-api.dev/objects/${storedId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (updateRes.ok) return { success: true, cloudId: storedId };
+      }
+
+      // Create new cloud object
+      const postRes = await fetch('https://api.restful-api.dev/objects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: stateData,
-          updatedAt: Date.now()
-        })
+        body: JSON.stringify(payload)
       });
-      return { success: response.ok };
+      if (postRes.ok) {
+        const created = await postRes.json();
+        if (created?.id) {
+          this.setStoredCloudId(created.id);
+          return { success: true, cloudId: created.id };
+        }
+      }
+
+      return { success: false, error: 'Cloud rejected payload' };
     } catch (e) {
       console.error('Cloud Sync Push Failed', e);
       return { success: false, error: e.message };
     }
   }
 
-  static async pullState(pin, customSupabase = null) {
-    if (!pin || pin.trim().length < 4) return { success: false, error: 'Invalid PIN' };
+  static async pullState(pinOrId, customSupabase = null) {
+    if (!pinOrId || pinOrId.trim().length < 4) return { success: false, error: 'Invalid PIN/Key' };
+    const cleanKey = pinOrId.trim();
 
     // 1. If custom Supabase configured
     if (customSupabase?.url && customSupabase?.anonKey) {
       try {
-        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(pin)}&select=*`, {
+        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(cleanKey)}&select=*`, {
           headers: {
             'apikey': customSupabase.anonKey,
             'Authorization': `Bearer ${customSupabase.anonKey}`
@@ -148,19 +188,32 @@ class CloudSyncManager {
           }
         }
       } catch (e) {
-        console.warn('Supabase pull error, falling back to relay', e);
+        console.warn('Supabase pull error, falling back to REST relay', e);
       }
     }
 
-    // 2. Cloud Relay
+    // 2. High-Availability REST Cloud Relay
     try {
-      const response = await fetch(`${CLOUD_SYNC_ENDPOINT}/sads_grindset_${encodeURIComponent(pin.trim())}`);
-      if (response.ok) {
-        const result = await response.json();
-        if (result && result.data) {
-          return { success: true, data: result.data, updatedAt: result.updatedAt };
+      // Check if cleanKey looks like a direct 32-char cloudId or if we have a storedId
+      const targetId = cleanKey.length >= 20 ? cleanKey : this.getStoredCloudId();
+
+      if (targetId) {
+        const getRes = await fetch(`https://api.restful-api.dev/objects/${targetId}`);
+        if (getRes.ok) {
+          const result = await getRes.json();
+          if (result?.data?.state) {
+            this.setStoredCloudId(result.id);
+            return { 
+              success: true, 
+              data: result.data.state, 
+              updatedAt: result.data.updatedAt,
+              cloudId: result.id 
+            };
+          }
         }
       }
+
+      // If no remote record exists yet, return not found
       return { success: false, error: 'No cloud data found' };
     } catch (e) {
       console.error('Cloud Sync Pull Failed', e);
@@ -1891,7 +1944,8 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
 // ==========================================
 const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus, onForceSync }) => {
   const [inputPin, setInputPin] = useState(state.syncPin || '');
-  const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [showSupabase, setShowSupabase] = useState(false);
@@ -1917,15 +1971,29 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
     dispatch({ type: 'SET_SYNC_PIN', payload: pin });
   };
 
-  const handleCopy = () => {
+  const handleCopyPin = () => {
     if (!state.syncPin) return;
     navigator.clipboard.writeText(state.syncPin);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedPin(true);
+    setTimeout(() => setCopiedPin(false), 2000);
+  };
+
+  const handleCopyShareLink = () => {
+    const key = state.syncPin || CloudSyncManager.getStoredCloudId();
+    if (!key) {
+      setFeedback({ type: 'error', msg: 'Connect a PIN first to generate a link' });
+      return;
+    }
+    const currentUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${currentUrl}?sync=${encodeURIComponent(key)}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+    onReward('Link Copied');
   };
 
   const handleLinkDevice = async () => {
-    const pin = inputPin.trim();
+    const pin = (inputPin || '').trim();
     if (pin.length < 4) {
       setFeedback({ type: 'error', msg: 'Enter at least 4 digits/characters' });
       return;
@@ -1935,22 +2003,22 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
     setFeedback(null);
     dispatch({ type: 'SET_SYNC_PIN', payload: pin });
 
-    // Try pulling state from cloud first
+    // 1. Try pulling state from cloud first
     const pullRes = await CloudSyncManager.pullState(pin, { url: sbUrl, anonKey: sbKey });
     if (pullRes.success && pullRes.data) {
       dispatch({ type: 'SET_STATE', payload: pullRes.data });
       dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
-      setFeedback({ type: 'success', msg: 'Connected & Synced cloud data to this device!' });
+      setFeedback({ type: 'success', msg: '✓ Connected & Synced cloud data to this device!' });
       onReward('Cloud Synced');
     } else {
-      // If no remote data, push our current local state up
+      // 2. If no remote data yet, push local state up
       const pushRes = await CloudSyncManager.pushState(pin, state, { url: sbUrl, anonKey: sbKey });
       if (pushRes.success) {
         dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
-        setFeedback({ type: 'success', msg: `PIN Linked! Local state pushed to cloud.` });
+        setFeedback({ type: 'success', msg: `✓ PIN linked! Data pushed to cloud.` });
         onReward('PIN Active');
       } else {
-        setFeedback({ type: 'error', msg: 'Cloud unreachable. Saved PIN locally.' });
+        setFeedback({ type: 'error', msg: 'Could not connect. Check internet connection.' });
       }
     }
     setSyncing(false);
@@ -1959,38 +2027,39 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
   const handleSaveSupabase = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify({ url: sbUrl.trim(), anonKey: sbKey.trim() }));
-      setFeedback({ type: 'success', msg: 'Custom Supabase credentials saved!' });
+      setFeedback({ type: 'success', msg: '✓ Custom Supabase credentials saved!' });
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div 
-        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-scale-in max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 animate-scale-in max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <div className="flex items-center gap-2 text-zinc-100 font-bold text-sm">
             <Cloud className="w-5 h-5 text-cyan-400" />
             <span>Cross-Device Cloud Sync & Device Link</span>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+          <button onClick={onClose} className="p-1 text-zinc-500 hover:text-zinc-300">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Sync Status Banner */}
+        {/* Sync Status Card */}
         <div className="flex items-center justify-between p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : syncStatus === 'syncing' ? 'bg-amber-400 animate-ping' : 'bg-zinc-600'}`}></div>
+            <div className={`w-3 h-3 rounded-full shrink-0 ${syncStatus === 'synced' ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : syncStatus === 'syncing' ? 'bg-amber-400 animate-ping' : 'bg-zinc-600'}`}></div>
             <div>
               <div className="text-xs font-bold text-zinc-200">
                 {state.syncPin ? `Linked PIN: ${state.syncPin}` : 'Not Linked to Cloud'}
               </div>
               <div className="text-[10px] text-zinc-500 font-mono">
-                {state.lastSynced ? `Last sync: ${new Date(state.lastSynced).toLocaleTimeString()}` : 'Offline / Local-first fallback active'}
+                {state.lastSynced ? `Synced: ${new Date(state.lastSynced).toLocaleTimeString()}` : 'Local-first offline fallback active'}
               </div>
             </div>
           </div>
@@ -1999,64 +2068,77 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
             <button 
               onClick={onForceSync}
               disabled={syncing}
-              className="px-3 py-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold hover:bg-cyan-500/30 transition-colors flex items-center gap-1.5"
+              className="min-h-[36px] px-3.5 py-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold hover:bg-cyan-500/30 transition-colors flex items-center gap-1.5 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-              <span>Sync Now</span>
+              <span>Sync</span>
             </button>
           )}
         </div>
 
-        {/* 6-Digit PIN Pairing */}
-        <div className="space-y-3 bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/80">
-          <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
+        {/* 6-Digit PIN Pairing Box */}
+        <div className="space-y-3.5 bg-zinc-900/40 p-4 sm:p-5 rounded-2xl border border-zinc-800/80">
+          <div className="flex items-center justify-between text-xs font-bold text-zinc-200">
             <span className="flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-cyan-400" />
-              Instant 6-Digit Device Link (Phone & PC)
+              6-Digit Sync PIN / Link Code
             </span>
           </div>
-          <p className="text-xs text-zinc-500">
-            Type the same PIN on your Phone (Samsung Galaxy) and PC to sync all timer sessions, tasks, and spaced repetition instantly.
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            Enter the same PIN on your Phone (Samsung Galaxy S25) and PC to keep your study sessions, timer, and tasks synced continuously.
           </p>
 
-          <div className="flex gap-2">
-            <input 
-              type="text" 
-              maxLength={12}
-              placeholder="e.g. 742918 or my-secret-pin" 
-              value={inputPin}
-              onChange={e => setInputPin(e.target.value)}
-              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono text-cyan-300 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/60"
-            />
-            <button 
-              onClick={generateRandomPin}
-              className="px-3 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-bold rounded-xl"
-              title="Generate 6-digit random PIN"
-            >
-              Random
-            </button>
-          </div>
+          {/* Input & Random Row */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                maxLength={32}
+                placeholder="Enter 6-digit PIN (e.g. 871655)" 
+                value={inputPin}
+                onChange={e => setInputPin(e.target.value)}
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm font-mono text-cyan-300 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/60 min-h-[44px]"
+              />
+              <button 
+                onClick={generateRandomPin}
+                className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-bold rounded-xl min-h-[44px] shrink-0"
+                title="Generate 6-digit random PIN"
+              >
+                Random
+              </button>
+            </div>
 
-          <div className="flex gap-2">
+            {/* Connect Button */}
             <button 
               onClick={handleLinkDevice}
               disabled={syncing}
-              className="flex-1 py-2.5 bg-cyan-500 text-zinc-950 font-bold text-xs rounded-xl hover:bg-cyan-400 transition-colors flex items-center justify-center gap-2 shadow-lg"
+              className="w-full min-h-[44px] py-3 bg-cyan-500 text-zinc-950 font-bold text-xs rounded-xl hover:bg-cyan-400 transition-colors flex items-center justify-center gap-2 shadow-lg touch-target"
             >
               <Cloud className="w-4 h-4" />
-              <span>{syncing ? 'Connecting...' : 'Connect & Link This Device'}</span>
+              <span>{syncing ? 'Connecting to Cloud...' : 'Connect & Link This Device'}</span>
             </button>
-
-            {state.syncPin && (
-              <button 
-                onClick={handleCopy}
-                className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl hover:bg-zinc-800 flex items-center gap-1.5"
-              >
-                {copied ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
-              </button>
-            )}
           </div>
+
+          {/* Share Links & Copy Row */}
+          {state.syncPin && (
+            <div className="pt-2 border-t border-zinc-800/60 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button 
+                onClick={handleCopyShareLink}
+                className="min-h-[40px] px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                {copiedLink ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Smartphone className="w-4 h-4" />}
+                <span>{copiedLink ? 'Link Copied!' : '📱 Copy 1-Click Phone Link'}</span>
+              </button>
+
+              <button 
+                onClick={handleCopyPin}
+                className="min-h-[40px] px-3 py-2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                {copiedPin ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedPin ? 'PIN Copied!' : `Copy PIN (${state.syncPin})`}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {feedback && (
@@ -2069,7 +2151,7 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
         <div className="border-t border-zinc-800 pt-3">
           <button 
             onClick={() => setShowSupabase(!showSupabase)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center justify-between w-full font-bold"
+            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center justify-between w-full font-bold py-1"
           >
             <span className="flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5 text-violet-400" />
@@ -2099,7 +2181,7 @@ const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus
               />
               <button 
                 onClick={handleSaveSupabase}
-                className="w-full py-2 bg-violet-500/20 text-violet-300 border border-violet-500/40 rounded-xl text-xs font-bold hover:bg-violet-500/30"
+                className="w-full py-2.5 bg-violet-500/20 text-violet-300 border border-violet-500/40 rounded-xl text-xs font-bold hover:bg-violet-500/30"
               >
                 Save Supabase Credentials
               </button>
@@ -2296,6 +2378,25 @@ export default function App() {
     }
     isSyncingRef.current = false;
   }, [state.syncPin]);
+
+  // URL Query Sync Auto-Linking (e.g. ?sync=871655 or ?sync=CLOUD_ID)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const syncParam = urlParams.get('sync');
+      if (syncParam) {
+        dispatch({ type: 'SET_SYNC_PIN', payload: syncParam });
+        CloudSyncManager.pullState(syncParam).then(res => {
+          if (res.success && res.data) {
+            dispatch({ type: 'SET_STATE', payload: res.data });
+            dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
+            showReward('Device Synced');
+          }
+        });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [showReward]);
 
   useEffect(() => {
     if (state.syncPin) {
