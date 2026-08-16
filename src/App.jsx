@@ -4,7 +4,8 @@ import {
   CheckCircle2, Circle, Plus, Trash2, Award, Zap, AlertCircle, 
   Flame, Calendar, Target, Clock, Activity, X, Volume2, VolumeX,
   Keyboard, ArrowRight, Sparkles, Bell, BellRing, RefreshCw, Shield, HelpCircle,
-  TrendingUp, CheckSquare
+  TrendingUp, CheckSquare, Cloud, CloudOff, CloudRain, Smartphone, Laptop,
+  Copy, CheckCheck, Sliders, Database, ArrowUpDown, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // ==========================================
@@ -74,6 +75,99 @@ class SoundEngine {
 }
 
 const soundEngine = new SoundEngine();
+
+// ==========================================
+// CLOUD SYNC ENGINE (6-DIGIT PIN & SUPABASE)
+// ==========================================
+const SYNC_STORAGE_KEY = 'sads-grindset-sync-pin';
+const SUPABASE_CONFIG_KEY = 'sads-grindset-supabase-cfg';
+
+// Free zero-friction cloud relay endpoint with PIN isolation
+const CLOUD_SYNC_ENDPOINT = 'https://kv.val.run';
+
+class CloudSyncManager {
+  static async pushState(pin, stateData, customSupabase = null) {
+    if (!pin || pin.trim().length < 4) return { success: false, error: 'Invalid PIN' };
+
+    // 1. If custom Supabase configured
+    if (customSupabase?.url && customSupabase?.anonKey) {
+      try {
+        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(pin)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': customSupabase.anonKey,
+            'Authorization': `Bearer ${customSupabase.anonKey}`,
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            pin,
+            data: stateData,
+            updated_at: new Date().toISOString()
+          })
+        });
+        if (res.ok) return { success: true };
+      } catch (e) {
+        console.warn('Supabase push error, falling back to relay', e);
+      }
+    }
+
+    // 2. Cloud Relay with PIN
+    try {
+      const response = await fetch(`${CLOUD_SYNC_ENDPOINT}/sads_grindset_${encodeURIComponent(pin.trim())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: stateData,
+          updatedAt: Date.now()
+        })
+      });
+      return { success: response.ok };
+    } catch (e) {
+      console.error('Cloud Sync Push Failed', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  static async pullState(pin, customSupabase = null) {
+    if (!pin || pin.trim().length < 4) return { success: false, error: 'Invalid PIN' };
+
+    // 1. If custom Supabase configured
+    if (customSupabase?.url && customSupabase?.anonKey) {
+      try {
+        const res = await fetch(`${customSupabase.url.replace(/\/$/, '')}/rest/v1/study_sync?pin=eq.${encodeURIComponent(pin)}&select=*`, {
+          headers: {
+            'apikey': customSupabase.anonKey,
+            'Authorization': `Bearer ${customSupabase.anonKey}`
+          }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          if (rows && rows.length > 0 && rows[0].data) {
+            return { success: true, data: rows[0].data, updatedAt: rows[0].updated_at };
+          }
+        }
+      } catch (e) {
+        console.warn('Supabase pull error, falling back to relay', e);
+      }
+    }
+
+    // 2. Cloud Relay
+    try {
+      const response = await fetch(`${CLOUD_SYNC_ENDPOINT}/sads_grindset_${encodeURIComponent(pin.trim())}`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result && result.data) {
+          return { success: true, data: result.data, updatedAt: result.updatedAt };
+        }
+      }
+      return { success: false, error: 'No cloud data found' };
+    } catch (e) {
+      console.error('Cloud Sync Pull Failed', e);
+      return { success: false, error: e.message };
+    }
+  }
+}
 
 // ==========================================
 // CONSTANTS & UTILITIES
@@ -220,6 +314,7 @@ const getCleanState = () => ({
   timerSeconds: 0,
   activeSubject: 'Math',
   customTopic: '',
+  dailyTargetHours: 6.0, // Customizable Daily Target
   sessions: [],
   topics: [],
   tasks: [],
@@ -227,7 +322,9 @@ const getCleanState = () => ({
   streak: 0,
   lastStudyDate: null,
   audioEnabled: false,
-  notificationsEnabled: false
+  notificationsEnabled: false,
+  syncPin: '',
+  lastSynced: null
 });
 
 // ==========================================
@@ -239,6 +336,13 @@ const reducer = (state, action) => {
       return { ...state, ...action.payload };
     case 'SET_TAB':
       return { ...state, activeTab: action.payload };
+    case 'SET_DAILY_TARGET':
+      soundEngine.play('click');
+      return { ...state, dailyTargetHours: Math.max(0.5, Math.min(18.0, action.payload)) };
+    case 'SET_SYNC_PIN':
+      return { ...state, syncPin: action.payload };
+    case 'SET_LAST_SYNCED':
+      return { ...state, lastSynced: action.payload };
     case 'TOGGLE_EMERGENCY':
       soundEngine.play('alarm');
       return { ...state, emergencyMode: !state.emergencyMode };
@@ -251,7 +355,7 @@ const reducer = (state, action) => {
     case 'TOGGLE_NOTIFICATIONS':
       return { ...state, notificationsEnabled: !state.notificationsEnabled };
     case 'RESET_ALL_DATA':
-      return getCleanState();
+      return { ...getCleanState(), syncPin: state.syncPin };
     case 'SET_TIMER':
       return { ...state, timerSeconds: action.payload };
     case 'TOGGLE_TIMER':
@@ -320,7 +424,7 @@ const reducer = (state, action) => {
         subject: action.payload.subject,
         name: action.payload.name,
         dateAdded: TODAY_STR,
-        stage: 1, // Stage 1 of 7
+        stage: 1,
         reviews: [TODAY_STR],
         nextReview: addDays(TODAY_STR, 1),
         status: 'upcoming'
@@ -395,6 +499,33 @@ const reducer = (state, action) => {
 };
 
 // ==========================================
+// TARGET EDITOR POPOVER / MODAL
+// ==========================================
+const DailyTargetSelector = ({ targetHours, onChange }) => {
+  return (
+    <div className="flex items-center gap-1.5 bg-zinc-950/80 border border-zinc-800/80 px-2 py-1 rounded-xl">
+      <button 
+        onClick={() => onChange(Math.max(1.0, targetHours - 0.5))}
+        className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs flex items-center justify-center transition-colors"
+        title="Decrease goal by 0.5h"
+      >
+        -
+      </button>
+      <span className="font-mono text-xs font-bold text-emerald-400 min-w-[40px] text-center">
+        {targetHours.toFixed(1)}h
+      </span>
+      <button 
+        onClick={() => onChange(Math.min(16.0, targetHours + 0.5))}
+        className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs flex items-center justify-center transition-colors"
+        title="Increase goal by 0.5h"
+      >
+        +
+      </button>
+    </div>
+  );
+};
+
+// ==========================================
 // MODULE 1: LIVE FOCUS ENGINE (WIDESCREEN 2-COLUMN)
 // ==========================================
 const FocusEngine = ({ state, dispatch, onReward }) => {
@@ -407,7 +538,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
 
   const todaySessions = state.sessions.filter(s => s.date === TODAY_STR);
   const todaySeconds = todaySessions.reduce((acc, s) => acc + s.duration, 0);
-  const targetSeconds = 6 * 3600;
+  const targetSeconds = (state.dailyTargetHours || 6.0) * 3600;
   const todayProgress = Math.min(100, (todaySeconds / targetSeconds) * 100);
 
   const pendingTasks = state.tasks.filter(t => !t.completed);
@@ -420,15 +551,15 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animate-fade-in">
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animate-fade-in pb-28">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         
         {/* LEFT COLUMN: LIVE FOCUS DIAL & SUBJECT CONSOLE (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col items-center justify-center bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 sm:p-8 shadow-2xl relative">
+        <div className="lg:col-span-7 flex flex-col items-center justify-center bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative">
           
           {/* Radial Timer Dial */}
           <div className="relative flex items-center justify-center my-2">
-            <div className={`relative flex items-center justify-center w-72 h-72 sm:w-84 sm:h-84 rounded-full transition-all duration-700 ${state.timerRunning ? currentTheme.glow : ''}`}>
+            <div className={`relative flex items-center justify-center w-68 h-68 sm:w-84 sm:h-84 rounded-full transition-all duration-700 ${state.timerRunning ? currentTheme.glow : ''}`}>
               <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 320 320">
                 <circle 
                   cx="160" cy="160" r={radius} 
@@ -447,8 +578,8 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
                 />
               </svg>
 
-              <div className="z-10 flex flex-col items-center select-none text-center px-4 max-w-[240px] sm:max-w-[270px]">
-                <span className="font-mono text-4xl sm:text-5xl font-bold tracking-tight text-zinc-100 drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+              <div className="z-10 flex flex-col items-center select-none text-center px-4 max-w-[230px] sm:max-w-[270px]">
+                <span className="font-mono text-3xl sm:text-5xl font-bold tracking-tight text-zinc-100 drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                   {formatTime(state.timerSeconds)}
                 </span>
 
@@ -459,7 +590,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
                 </div>
 
                 {state.customTopic && (
-                  <span className="text-xs text-zinc-400 mt-2 font-medium truncate max-w-[210px] block">
+                  <span className="text-xs text-zinc-400 mt-2 font-medium truncate max-w-[200px] block">
                     {state.customTopic}
                   </span>
                 )}
@@ -468,12 +599,12 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
           </div>
 
           {/* Controls */}
-          <div className="flex items-center justify-center space-x-5 my-4">
+          <div className="flex items-center justify-center space-x-4 sm:space-x-5 my-4">
             <button 
               onClick={() => dispatch({ type: 'RESET_TIMER' })}
               disabled={state.timerSeconds === 0}
               title="Reset Timer (R)"
-              className="p-4 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-all disabled:opacity-20 disabled:pointer-events-none touch-target"
+              className="p-3.5 sm:p-4 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-all disabled:opacity-20 disabled:pointer-events-none touch-target"
             >
               <RotateCcw className="w-5 h-5" />
             </button>
@@ -481,16 +612,16 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
             <button 
               onClick={() => dispatch({ type: 'TOGGLE_TIMER' })}
               title={state.timerRunning ? "Pause Timer (Space)" : "Start Timer (Space)"}
-              className={`p-6 rounded-full transition-all transform hover:scale-105 active:scale-95 touch-target shadow-xl ${state.timerRunning ? 'bg-zinc-800 text-amber-400 border border-amber-500/40 glow-amber' : 'bg-emerald-500 text-zinc-950 glow-emerald font-bold'}`}
+              className={`p-5 sm:p-6 rounded-full transition-all transform hover:scale-105 active:scale-95 touch-target shadow-xl ${state.timerRunning ? 'bg-zinc-800 text-amber-400 border border-amber-500/40 glow-amber' : 'bg-emerald-500 text-zinc-950 glow-emerald font-bold'}`}
             >
-              {state.timerRunning ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-0.5" />}
+              {state.timerRunning ? <Pause className="w-6 h-6 sm:w-7 sm:h-7 fill-current" /> : <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-current ml-0.5" />}
             </button>
 
             <button 
               onClick={handleLogSession}
               disabled={state.timerSeconds === 0}
               title="Log Focus Session"
-              className="p-4 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-zinc-900 transition-all disabled:opacity-20 disabled:pointer-events-none touch-target"
+              className="p-3.5 sm:p-4 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 hover:bg-zinc-900 transition-all disabled:opacity-20 disabled:pointer-events-none touch-target"
             >
               <Check className="w-5 h-5" />
             </button>
@@ -500,7 +631,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
           <div className="w-full max-w-lg bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-4 space-y-3 mt-2">
             <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-zinc-500">
               <span>Target Subject</span>
-              <span className="text-zinc-600 font-mono">Live Sync</span>
+              <span className="text-zinc-600 font-mono">Real-Time Sync</span>
             </div>
 
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -535,14 +666,19 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
         {/* RIGHT COLUMN: TODAY'S LIVE GRIND (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           
-          {/* Daily Goal & Metrics Card */}
-          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
+          {/* Daily Goal & Custom Target Card */}
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
                 <Target className="w-4 h-4 text-emerald-400" />
-                Today's Target Progress
+                Custom Daily Goal
               </h3>
-              <span className="text-xs font-mono text-zinc-500">Goal: 6.0h</span>
+              
+              {/* Target Stepper */}
+              <DailyTargetSelector 
+                targetHours={state.dailyTargetHours || 6.0} 
+                onChange={(val) => dispatch({ type: 'SET_DAILY_TARGET', payload: val })}
+              />
             </div>
 
             <div className="flex items-center justify-between gap-4 p-4 bg-zinc-950/70 border border-zinc-800/80 rounded-2xl">
@@ -552,7 +688,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
                   {formatTime(todaySeconds).slice(0, 5)} <span className="text-xs text-zinc-500 font-sans">hrs</span>
                 </div>
                 <span className="text-xs text-emerald-400/90 font-medium block">
-                  {Math.max(0, 6 - (todaySeconds / 3600)).toFixed(1)}h left to hit daily goal
+                  {Math.max(0, (state.dailyTargetHours || 6.0) - (todaySeconds / 3600)).toFixed(1)}h remaining for {(state.dailyTargetHours || 6.0)}h target
                 </span>
               </div>
 
@@ -582,7 +718,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
           </div>
 
           {/* Today's Focus History */}
-          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 space-y-3">
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-6 space-y-3">
             <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
               <Clock className="w-4 h-4 text-cyan-400" />
               Today's Session Logs ({todaySessions.length})
@@ -616,7 +752,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
           </div>
 
           {/* Quick Task Queue Preview */}
-          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 space-y-3">
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-6 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
                 <ListChecks className="w-4 h-4 text-violet-400" />
@@ -670,9 +806,9 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
 };
 
 // ==========================================
-// MODULE 2: ANALYTICS & STATS (8-TIER GRINDSET ENGINE)
+// MODULE 2: ANALYTICS & STATS (CUSTOM GOAL ENGINE)
 // ==========================================
-const Analytics = ({ state }) => {
+const Analytics = ({ state, dispatch }) => {
   const todaySessions = state.sessions.filter(s => s.date === TODAY_STR);
   const todaySeconds = todaySessions.reduce((acc, s) => acc + s.duration, 0);
   
@@ -680,7 +816,8 @@ const Analytics = ({ state }) => {
   const weekSessions = state.sessions.filter(s => s.date >= weekStart);
   const weekSeconds = weekSessions.reduce((acc, s) => acc + s.duration, 0);
 
-  const targetSeconds = 6 * 3600;
+  const targetHours = state.dailyTargetHours || 6.0;
+  const targetSeconds = targetHours * 3600;
   const todayProgress = Math.min(100, (todaySeconds / targetSeconds) * 100);
 
   const subjectTimes = weekSessions.reduce((acc, s) => {
@@ -701,7 +838,7 @@ const Analytics = ({ state }) => {
             <Clock className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="mt-3">
-            <span className="text-3xl font-mono font-bold text-zinc-100">{formatTime(todaySeconds).slice(0, 5)}</span>
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-zinc-100">{formatTime(todaySeconds).slice(0, 5)}</span>
             <span className="text-xs text-zinc-500 ml-1">hrs</span>
           </div>
           <div className="text-[11px] text-emerald-400/80 mt-2 font-medium">
@@ -715,7 +852,7 @@ const Analytics = ({ state }) => {
             <Calendar className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="mt-3">
-            <span className="text-3xl font-mono font-bold text-zinc-100">{(weekSeconds / 3600).toFixed(1)}</span>
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-zinc-100">{(weekSeconds / 3600).toFixed(1)}</span>
             <span className="text-xs text-zinc-500 ml-1">hours</span>
           </div>
           <div className="text-[11px] text-cyan-400/80 mt-2 font-medium">
@@ -729,11 +866,11 @@ const Analytics = ({ state }) => {
             <Flame className="w-4 h-4 text-amber-500" />
           </div>
           <div className="mt-3">
-            <span className="text-3xl font-mono font-bold text-amber-400">{state.streak}</span>
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-amber-400">{state.streak}</span>
             <span className="text-xs text-amber-500/80 ml-1">days on fire</span>
           </div>
           <div className="text-[11px] text-amber-400/70 mt-2 font-medium">
-            Target: 6h / day
+            Target: {targetHours.toFixed(1)}h / day
           </div>
         </div>
 
@@ -744,7 +881,7 @@ const Analytics = ({ state }) => {
             <Zap className={`w-4 h-4 ${rankInfo.color}`} />
           </div>
           <div className="mt-3">
-            <span className={`text-xl font-mono font-bold ${rankInfo.color} truncate block`}>{rankInfo.current}</span>
+            <span className={`text-lg sm:text-xl font-mono font-bold ${rankInfo.color} truncate block`}>{rankInfo.current}</span>
             <div className="text-xs text-zinc-500 font-mono mt-0.5">{state.xp} XP earned</div>
           </div>
           <div className="mt-2">
@@ -752,7 +889,7 @@ const Analytics = ({ state }) => {
               <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${rankInfo.progress}%` }}></div>
             </div>
             <span className="text-[10px] text-zinc-500 mt-1 block">
-              {rankInfo.progress}% to {rankInfo.next}
+              {rankInfo.progress}% to {rankInfo.next.split(' ')[0]}
             </span>
           </div>
         </div>
@@ -761,15 +898,18 @@ const Analytics = ({ state }) => {
       {/* Target Ring & Weekly Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 flex flex-col items-center justify-between">
-          <div className="w-full flex items-center justify-between mb-2">
+        <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 flex flex-col items-center justify-between space-y-4">
+          <div className="w-full flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-bold text-zinc-300 flex items-center">
               <Target className="w-4 h-4 mr-2 text-emerald-400"/> Daily Target Progress
             </h3>
-            <span className="text-xs font-mono text-zinc-500">6.0h Target</span>
+            <DailyTargetSelector 
+              targetHours={targetHours} 
+              onChange={(val) => dispatch({ type: 'SET_DAILY_TARGET', payload: val })}
+            />
           </div>
 
-          <div className="relative w-44 h-44 my-4 flex items-center justify-center">
+          <div className="relative w-44 h-44 my-2 flex items-center justify-center">
             <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
               <circle cx="50" cy="50" r="42" className="stroke-zinc-800" strokeWidth="8" fill="none" />
               <circle 
@@ -783,7 +923,7 @@ const Analytics = ({ state }) => {
             </svg>
             <div className="flex flex-col items-center">
               <span className="text-3xl font-mono font-bold text-zinc-100">{Math.round(todayProgress)}%</span>
-              <span className="text-[10px] text-zinc-500 uppercase mt-0.5">Completed</span>
+              <span className="text-[10px] text-zinc-500 uppercase mt-0.5">{targetHours.toFixed(1)}h Goal</span>
             </div>
           </div>
 
@@ -794,7 +934,7 @@ const Analytics = ({ state }) => {
             </div>
             <div>
               <span className="text-zinc-500 block text-[10px] uppercase">Remaining</span>
-              <span className="font-mono text-zinc-200 font-bold">{Math.max(0, 6 - (todaySeconds / 3600)).toFixed(1)} hrs</span>
+              <span className="font-mono text-zinc-200 font-bold">{Math.max(0, targetHours - (todaySeconds / 3600)).toFixed(1)} hrs</span>
             </div>
           </div>
         </div>
@@ -876,12 +1016,15 @@ const Analytics = ({ state }) => {
 };
 
 // ==========================================
-// MODULE 3: SURVIVAL HEATMAP (ACADEMIC ROADMAP & MATRIX)
+// MODULE 3: SURVIVAL HEATMAP (MOBILE-ADAPTIVE & ROADMAP)
 // ==========================================
 const SurvivalHeatmap = ({ state }) => {
   const [selectedCell, setSelectedCell] = useState(null);
   const [viewMode, setViewMode] = useState('future'); // 'future' | 'past'
-  const totalDays = 280; // 40 weeks (~9.5 months)
+  const [weekRange, setWeekRange] = useState(16); // 12 | 24 | 40 weeks
+
+  const targetHours = state.dailyTargetHours || 6.0;
+  const totalDays = weekRange * 7;
   
   const dateMap = useMemo(() => {
     const map = {};
@@ -893,7 +1036,6 @@ const SurvivalHeatmap = ({ state }) => {
     return map;
   }, [state.sessions]);
 
-  // Map of future scheduled reviews
   const futureSrMap = useMemo(() => {
     const map = {};
     state.topics.forEach(t => {
@@ -908,7 +1050,6 @@ const SurvivalHeatmap = ({ state }) => {
     const cells = [];
     
     if (viewMode === 'future') {
-      // START FROM TODAY -> 280 DAYS IN THE FUTURE
       for (let i = 0; i < totalDays; i++) {
         const dStr = addDays(TODAY_STR, i);
         const data = dateMap[dStr] || { hours: 0, subjects: {} };
@@ -921,13 +1062,19 @@ const SurvivalHeatmap = ({ state }) => {
           if (time > maxTime) { maxTime = time; topSubject = sub; }
         });
 
+        // Dynamic thresholds relative to dailyTargetHours
+        const t1 = targetHours * 0.2;
+        const t2 = targetHours * 0.45;
+        const t3 = targetHours * 0.75;
+        const t4 = targetHours * 1.0;
+
         let bgClass = 'bg-zinc-900/90 border-zinc-800/40';
         if (isToday) bgClass = 'bg-emerald-950/90 border-emerald-400 ring-1 ring-emerald-400/60';
-        else if (data.hours > 0 && data.hours < 1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
-        else if (data.hours >= 1 && data.hours < 2.5) bgClass = 'bg-emerald-900 border-emerald-700/60';
-        else if (data.hours >= 2.5 && data.hours < 4.5) bgClass = 'bg-emerald-700 border-emerald-500/60';
-        else if (data.hours >= 4.5 && data.hours < 6) bgClass = 'bg-emerald-500 border-emerald-400/80';
-        else if (data.hours >= 6) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
+        else if (data.hours > 0 && data.hours < t1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
+        else if (data.hours >= t1 && data.hours < t2) bgClass = 'bg-emerald-900 border-emerald-700/60';
+        else if (data.hours >= t2 && data.hours < t3) bgClass = 'bg-emerald-700 border-emerald-500/60';
+        else if (data.hours >= t3 && data.hours < t4) bgClass = 'bg-emerald-500 border-emerald-400/80';
+        else if (data.hours >= t4) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
         else if (scheduledCount > 0) bgClass = 'bg-cyan-950/50 border-cyan-500/40';
 
         cells.push({
@@ -941,7 +1088,6 @@ const SurvivalHeatmap = ({ state }) => {
         });
       }
     } else {
-      // 280 DAYS IN THE PAST -> TODAY
       for (let i = totalDays - 1; i >= 0; i--) {
         const dStr = addDays(TODAY_STR, -i);
         const data = dateMap[dStr] || { hours: 0, subjects: {} };
@@ -953,13 +1099,18 @@ const SurvivalHeatmap = ({ state }) => {
           if (time > maxTime) { maxTime = time; topSubject = sub; }
         });
 
+        const t1 = targetHours * 0.2;
+        const t2 = targetHours * 0.45;
+        const t3 = targetHours * 0.75;
+        const t4 = targetHours * 1.0;
+
         let bgClass = 'bg-zinc-900/90 border-zinc-800/40';
         if (isToday) bgClass = 'bg-emerald-950/90 border-emerald-400 ring-1 ring-emerald-400/60';
-        else if (data.hours > 0 && data.hours < 1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
-        else if (data.hours >= 1 && data.hours < 2.5) bgClass = 'bg-emerald-900 border-emerald-700/60';
-        else if (data.hours >= 2.5 && data.hours < 4.5) bgClass = 'bg-emerald-700 border-emerald-500/60';
-        else if (data.hours >= 4.5 && data.hours < 6) bgClass = 'bg-emerald-500 border-emerald-400/80';
-        else if (data.hours >= 6) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
+        else if (data.hours > 0 && data.hours < t1) bgClass = 'bg-emerald-950/90 border-emerald-900/60';
+        else if (data.hours >= t1 && data.hours < t2) bgClass = 'bg-emerald-900 border-emerald-700/60';
+        else if (data.hours >= t2 && data.hours < t3) bgClass = 'bg-emerald-700 border-emerald-500/60';
+        else if (data.hours >= t3 && data.hours < t4) bgClass = 'bg-emerald-500 border-emerald-400/80';
+        else if (data.hours >= t4) bgClass = 'bg-emerald-400 border-emerald-300 glow-emerald';
 
         cells.push({
           date: dStr,
@@ -974,9 +1125,9 @@ const SurvivalHeatmap = ({ state }) => {
     }
 
     return cells;
-  }, [dateMap, futureSrMap, viewMode]);
+  }, [dateMap, futureSrMap, viewMode, totalDays, targetHours]);
 
-  const cols = 40;
+  const cols = weekRange;
   const rows = 7;
   const gridTransposed = useMemo(() => {
     const transposed = Array.from({ length: rows }, () => Array(cols).fill(null));
@@ -988,39 +1139,54 @@ const SurvivalHeatmap = ({ state }) => {
       }
     });
     return transposed;
-  }, [grid]);
+  }, [grid, cols]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in pb-28">
       
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 shadow-2xl space-y-6">
+      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-5">
+        
+        {/* Header with Timeline & Range Selectors */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/60 pb-4">
           <div>
             <h2 className="text-base font-bold text-zinc-100 flex items-center">
               <Grid3x3 className="w-5 h-5 mr-2 text-emerald-400"/> 
-              {viewMode === 'future' ? 'Future Academic Roadmap (40 Weeks)' : 'Past Consistency Matrix (40 Weeks)'}
+              {viewMode === 'future' ? `Academic Roadmap (${weekRange} Wks)` : `Past Consistency (${weekRange} Wks)`}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {viewMode === 'future' 
-                ? 'Looking forward: Academic journey starting from Today across your entire exam roadmap.' 
-                : 'Looking back: 280-day retrospective consistency log leading up to Today.'}
+              Goal: {targetHours.toFixed(1)}h/day • {viewMode === 'future' ? 'Projecting forward from Today' : 'Retrospective consistency history'}
             </p>
           </div>
 
-          {/* Timeline View Mode Toggle */}
-          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-2xl border border-zinc-800 text-xs">
-            <button 
-              onClick={() => setViewMode('future')}
-              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${viewMode === 'future' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Future Roadmap (Today →)
-            </button>
-            <button 
-              onClick={() => setViewMode('past')}
-              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${viewMode === 'past' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Past History (← Today)
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Week Range Selector */}
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
+              {[12, 16, 24, 40].map(w => (
+                <button
+                  key={w}
+                  onClick={() => setWeekRange(w)}
+                  className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all ${weekRange === w ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  {w}w
+                </button>
+              ))}
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
+              <button 
+                onClick={() => setViewMode('future')}
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${viewMode === 'future' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Roadmap (→)
+              </button>
+              <button 
+                onClick={() => setViewMode('past')}
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${viewMode === 'past' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                History (←)
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1028,80 +1194,79 @@ const SurvivalHeatmap = ({ state }) => {
         <div className="flex items-center justify-between text-xs text-zinc-500 flex-wrap gap-2">
           <div className="flex items-center gap-3 font-mono text-[11px]">
             <span className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded bg-emerald-950 border border-emerald-400 ring-1 ring-emerald-400/60"></div>
+              <div className="w-3 h-3 rounded bg-emerald-950 border border-emerald-400 ring-1 ring-emerald-400/60"></div>
               <strong className="text-zinc-300">Today (Start)</strong>
             </span>
             {viewMode === 'future' && (
               <span className="flex items-center gap-1.5">
-                <div className="w-3.5 h-3.5 rounded bg-cyan-950/60 border border-cyan-500/40"></div>
-                <strong className="text-cyan-400">Scheduled Recall Date</strong>
+                <div className="w-3 h-3 rounded bg-cyan-950/60 border border-cyan-500/40"></div>
+                <strong className="text-cyan-400">Scheduled Recall</strong>
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono">
             <span>0h</span>
-            <div className="w-3.5 h-3.5 rounded bg-zinc-900 border border-zinc-800"></div>
-            <div className="w-3.5 h-3.5 rounded bg-emerald-950 border border-emerald-900"></div>
-            <div className="w-3.5 h-3.5 rounded bg-emerald-900 border border-emerald-700"></div>
-            <div className="w-3.5 h-3.5 rounded bg-emerald-700 border border-emerald-500"></div>
-            <div className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-400"></div>
-            <div className="w-3.5 h-3.5 rounded bg-emerald-400 border border-emerald-300"></div>
-            <span>6h+</span>
+            <div className="w-3 h-3 rounded bg-zinc-900 border border-zinc-800"></div>
+            <div className="w-3 h-3 rounded bg-emerald-950 border border-emerald-900"></div>
+            <div className="w-3 h-3 rounded bg-emerald-900 border border-emerald-700"></div>
+            <div className="w-3 h-3 rounded bg-emerald-700 border border-emerald-500"></div>
+            <div className="w-3 h-3 rounded bg-emerald-500 border border-emerald-400"></div>
+            <div className="w-3 h-3 rounded bg-emerald-400 border border-emerald-300"></div>
+            <span>{targetHours.toFixed(0)}h+</span>
           </div>
         </div>
 
-        {/* Matrix Viewport */}
-        <div className="overflow-x-auto pb-4">
-          <div className="min-w-[860px]">
+        {/* Responsive Matrix Viewport */}
+        <div className="overflow-x-auto pb-2">
+          <div className="min-w-fit">
             
             {/* Timeline Markers */}
-            <div className="flex justify-between text-[11px] font-mono text-zinc-500 mb-3 pl-8 pr-2">
+            <div className="flex justify-between text-[10px] sm:text-[11px] font-mono text-zinc-500 mb-2 pl-7 pr-1">
               {viewMode === 'future' ? (
                 <>
                   <span className="text-emerald-400 font-bold">Today (Start)</span>
-                  <span>+1 Month</span>
-                  <span>+3 Months</span>
-                  <span>+6 Months</span>
-                  <span className="text-cyan-400 font-bold">+9 Months (Finals)</span>
+                  <span>+1 Mo</span>
+                  {weekRange >= 24 && <span>+3 Mo</span>}
+                  {weekRange >= 32 && <span>+6 Mo</span>}
+                  <span className="text-cyan-400 font-bold">End</span>
                 </>
               ) : (
                 <>
-                  <span>9 Months Ago</span>
-                  <span>6 Months Ago</span>
-                  <span>3 Months Ago</span>
-                  <span>1 Month Ago</span>
+                  <span>{weekRange} Wks Ago</span>
+                  {weekRange >= 24 && <span>Midway</span>}
+                  <span>1 Mo Ago</span>
                   <span className="text-emerald-400 font-bold">Today</span>
                 </>
               )}
             </div>
 
             <div className="flex">
-              <div className="flex flex-col justify-between mr-2 text-[10px] font-mono text-zinc-500 py-1">
-                <span>Mon</span>
-                <span>Wed</span>
-                <span>Fri</span>
-                <span>Sun</span>
+              <div className="flex flex-col justify-between mr-2 text-[9px] font-mono text-zinc-500 py-0.5">
+                <span>M</span>
+                <span>W</span>
+                <span>F</span>
+                <span>S</span>
               </div>
 
-              <div className="flex flex-col gap-1.5 flex-1">
+              <div className="flex flex-col gap-1 sm:gap-1.5 flex-1">
                 {gridTransposed.map((row, rIdx) => (
-                  <div key={rIdx} className="flex gap-1.5">
+                  <div key={rIdx} className="flex gap-1 sm:gap-1.5">
                     {row.map((cell, cIdx) => cell ? (
                       <div 
                         key={cIdx} 
                         onClick={() => setSelectedCell(cell)}
-                        className={`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-[3px] border ${cell.bgClass} relative group cursor-pointer transition-transform hover:scale-135 hover:z-20`}
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[3px] border ${cell.bgClass} relative group cursor-pointer transition-transform hover:scale-135 hover:z-20`}
                       >
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 bg-zinc-950 text-zinc-200 text-xs p-2.5 rounded-xl shadow-2xl whitespace-nowrap border border-zinc-700 pointer-events-none">
                           <div className="font-bold text-zinc-100 flex items-center gap-1.5">
                             <span>{cell.date}</span>
-                            {cell.isToday && <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">TODAY</span>}
+                            {cell.isToday && <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-mono">TODAY</span>}
                           </div>
                           {cell.hours > 0 ? (
                             <div className="text-emerald-400 font-mono font-semibold">{cell.hours.toFixed(1)} hours studied</div>
                           ) : cell.isFuture ? (
-                            <div className="text-zinc-400 font-mono">Upcoming study day</div>
+                            <div className="text-zinc-400 font-mono">Upcoming roadmap day</div>
                           ) : (
                             <div className="text-zinc-500 font-mono">0 hours logged</div>
                           )}
@@ -1115,7 +1280,7 @@ const SurvivalHeatmap = ({ state }) => {
                           )}
                         </div>
                       </div>
-                    ) : <div key={cIdx} className="w-4 h-4"></div>)}
+                    ) : <div key={cIdx} className="w-3.5 h-3.5 sm:w-4 sm:h-4"></div>)}
                   </div>
                 ))}
               </div>
@@ -1127,10 +1292,10 @@ const SurvivalHeatmap = ({ state }) => {
 
       {/* Selected Cell Preview */}
       {selectedCell && (
-        <div className="bg-zinc-900/90 border border-emerald-500/40 rounded-2xl p-5 flex items-center justify-between shadow-2xl animate-scale-in">
+        <div className="bg-zinc-900/90 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-2xl animate-scale-in">
           <div>
             <div className="text-xs text-zinc-500 uppercase font-mono">Day Detail Inspect</div>
-            <h3 className="text-lg font-bold text-zinc-100 mt-0.5 flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-zinc-100 mt-0.5 flex items-center gap-2">
               <span>{selectedCell.date}</span>
               {selectedCell.isToday && (
                 <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
@@ -1138,7 +1303,7 @@ const SurvivalHeatmap = ({ state }) => {
                 </span>
               )}
             </h3>
-            <div className="flex items-center gap-3 mt-2 text-sm">
+            <div className="flex items-center gap-3 mt-1.5 text-xs sm:text-sm flex-wrap">
               <span className="font-mono text-emerald-400 font-bold">
                 {selectedCell.hours > 0 ? `${selectedCell.hours.toFixed(1)} Hours Studied` : selectedCell.isFuture ? 'Future Roadmap Day' : '0 Hours'}
               </span>
@@ -1154,7 +1319,7 @@ const SurvivalHeatmap = ({ state }) => {
             onClick={() => setSelectedCell(null)}
             className="p-2 text-zinc-500 hover:text-zinc-300 bg-zinc-800/80 rounded-full"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -1164,7 +1329,7 @@ const SurvivalHeatmap = ({ state }) => {
 };
 
 // ==========================================
-// MODULE 4: SPACED REPETITION (7 STAGES + NOTIFICATIONS)
+// MODULE 4: SPACED REPETITION (MOBILE OPTIMIZED)
 // ==========================================
 const SpacedRepetition = ({ state, dispatch, onReward }) => {
   const [subject, setSubject] = useState(SUBJECTS[0]);
@@ -1217,9 +1382,10 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
 
     return (
       <div className={`p-4 sm:p-5 rounded-2xl transition-all border ${isDue ? 'bg-cyan-950/20 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)] glow-cyan' : isMastered ? 'bg-zinc-900/30 border-zinc-800/40 opacity-75' : 'bg-zinc-900/60 border-zinc-800/80'}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-2 flex-1">
-            
+        <div className="flex flex-col gap-4">
+          
+          {/* Header & Badges */}
+          <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${theme.pillActive}`}>
                 {topic.subject}
@@ -1234,7 +1400,7 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
               )}
             </div>
 
-            <h4 className="text-zinc-100 font-bold text-base sm:text-lg">{topic.name}</h4>
+            <h4 className="text-zinc-100 font-bold text-base sm:text-lg break-words">{topic.name}</h4>
 
             {/* Stage Progress Bar */}
             <div className="flex items-center gap-2 max-w-md pt-1">
@@ -1252,39 +1418,45 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-            {/* Inline Quick Focus Play Button */}
-            <button 
-              onClick={() => dispatch({ 
-                type: 'START_TIMER_FOR_TOPIC', 
-                payload: { subject: topic.subject, topic: `Spaced Recall: ${topic.name}` } 
-              })}
-              title="Focus on this topic now"
-              className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all touch-target"
-            >
-              <Play className="w-4 h-4 fill-current" />
-            </button>
-
-            {isDue && (
+          {/* Action Row - Mobile responsive wrap with 44px tap targets */}
+          <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60 flex-wrap sm:flex-nowrap justify-between">
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+              {/* Inline Quick Focus Play Button */}
               <button 
-                onClick={() => {
-                  onReward('+50 XP');
-                  dispatch({ type: 'REVIEW_TOPIC', payload: topic.id });
-                }}
-                className="px-5 py-3 bg-cyan-500 text-zinc-950 font-extrabold text-xs rounded-xl hover:bg-cyan-400 transition-all touch-target shadow-lg flex items-center"
+                onClick={() => dispatch({ 
+                  type: 'START_TIMER_FOR_TOPIC', 
+                  payload: { subject: topic.subject, topic: `Spaced Recall: ${topic.name}` } 
+                })}
+                title="Focus on this topic now"
+                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all touch-target flex items-center justify-center gap-1.5 text-xs font-semibold"
               >
-                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                Reviewed & Cleared
+                <Play className="w-4 h-4 fill-current" />
+                <span className="sm:hidden">Focus</span>
               </button>
-            )}
+
+              {isDue && (
+                <button 
+                  onClick={() => {
+                    onReward('+50 XP');
+                    dispatch({ type: 'REVIEW_TOPIC', payload: topic.id });
+                  }}
+                  className="min-h-[44px] flex-1 sm:flex-initial px-4 py-2.5 bg-cyan-500 text-zinc-950 font-extrabold text-xs rounded-xl hover:bg-cyan-400 transition-all touch-target shadow-lg flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Reviewed & Cleared</span>
+                </button>
+              )}
+            </div>
 
             <button 
               onClick={() => dispatch({ type: 'DELETE_TOPIC', payload: topic.id })}
-              className="p-2.5 text-zinc-600 hover:text-rose-400 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-zinc-600 hover:text-rose-400 transition-colors rounded-xl"
+              title="Delete topic"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
+
         </div>
       </div>
     );
@@ -1312,7 +1484,7 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
 
           <button 
             onClick={requestBrowserNotification}
-            className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors shrink-0"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors shrink-0"
           >
             {state.notificationsEnabled ? '✓ Alerts Active' : 'Enable Device Alerts'}
           </button>
@@ -1320,13 +1492,13 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
       )}
 
       {/* Add Topic Form */}
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-6 space-y-4">
+      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-zinc-400">
           <span className="flex items-center gap-2">
             <Brain className="w-4 h-4 text-cyan-400" />
             Schedule Topic in 7-Stage Forgetting Curve Engine
           </span>
-          <span className="text-zinc-600 font-mono hidden sm:inline">Automatic +1d, +3d, +7d, +14d, +30d, +60d, +90d</span>
+          <span className="text-zinc-600 font-mono hidden sm:inline">+1d, +3d, +7d, +14d, +30d, +60d, +90d</span>
         </div>
 
         <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-3">
@@ -1346,7 +1518,7 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
           />
           <button 
             type="submit" 
-            className="bg-cyan-500 text-zinc-950 px-6 py-3 rounded-xl font-bold hover:bg-cyan-400 transition-colors touch-target flex items-center justify-center gap-2 shadow-lg"
+            className="min-h-[44px] bg-cyan-500 text-zinc-950 px-6 py-3 rounded-xl font-bold hover:bg-cyan-400 transition-colors touch-target flex items-center justify-center gap-2 shadow-lg"
           >
             <Plus className="w-5 h-5" />
             <span>Add Topic</span>
@@ -1367,24 +1539,24 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
       </div>
 
       {/* Section Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2">
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2 overflow-x-auto">
         <button 
           onClick={() => setActiveTabFilter('due')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTabFilter === 'due' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-md' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'due' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-md' : 'text-zinc-400 hover:text-zinc-200'}`}
         >
           <Zap className="w-4 h-4 text-cyan-400" />
           <span>Due Today ({dueTopics.length})</span>
         </button>
         <button 
           onClick={() => setActiveTabFilter('pipeline')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTabFilter === 'pipeline' ? 'bg-zinc-800 text-zinc-100 border border-zinc-700' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'pipeline' ? 'bg-zinc-800 text-zinc-100 border border-zinc-700' : 'text-zinc-400 hover:text-zinc-200'}`}
         >
           <Calendar className="w-4 h-4 text-zinc-400" />
           <span>Active Pipeline ({upcomingTopics.length})</span>
         </button>
         <button 
           onClick={() => setActiveTabFilter('mastered')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTabFilter === 'mastered' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'mastered' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' : 'text-zinc-400 hover:text-zinc-200'}`}
         >
           <Award className="w-4 h-4 text-emerald-400" />
           <span>Mastered ({masteredTopics.length})</span>
@@ -1443,12 +1615,12 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-8 pb-28 animate-scale-in">
       
-      <div className="text-center p-8 bg-rose-950/30 border border-rose-500/60 rounded-3xl glow-rose shadow-2xl">
-        <AlertCircle className="w-16 h-16 text-rose-500 mx-auto mb-3 animate-pulse" />
-        <h1 className="text-3xl font-extrabold text-rose-400 uppercase tracking-widest">
+      <div className="text-center p-6 sm:p-8 bg-rose-950/30 border border-rose-500/60 rounded-3xl glow-rose shadow-2xl">
+        <AlertCircle className="w-14 h-14 sm:w-16 sm:h-16 text-rose-500 mx-auto mb-3 animate-pulse" />
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-rose-400 uppercase tracking-widest">
           Emergency Buffer Mode
         </h1>
-        <p className="text-sm text-rose-300/80 mt-1 max-w-md mx-auto">
+        <p className="text-xs sm:text-sm text-rose-300/80 mt-1 max-w-md mx-auto">
           Distraction-free triage mode. Rapid-fire backlog destroyer active.
         </p>
         <div className="flex justify-center gap-4 mt-4 font-mono text-xs font-bold text-rose-400">
@@ -1471,7 +1643,7 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
             {dueTopics.map(topic => {
               const theme = SUBJECT_THEMES[topic.subject] || SUBJECT_THEMES.Math;
               return (
-                <div key={topic.id} className="bg-rose-950/20 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between">
+                <div key={topic.id} className="bg-rose-950/20 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between gap-3">
                   <div>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.pillActive}`}>
                       {topic.subject}
@@ -1483,7 +1655,7 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
                       onReward('+50 XP');
                       dispatch({ type: 'REVIEW_TOPIC', payload: topic.id });
                     }}
-                    className="px-4 py-2 bg-rose-500 text-white font-bold text-xs rounded-xl hover:bg-rose-600 transition-all touch-target shadow-lg"
+                    className="min-h-[44px] px-4 py-2 bg-rose-500 text-white font-bold text-xs rounded-xl hover:bg-rose-600 transition-all touch-target shadow-lg"
                   >
                     Clear
                   </button>
@@ -1507,7 +1679,7 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
 
           <div className="space-y-3">
             {pendingTasks.map(t => (
-              <div key={t.id} className="bg-rose-950/20 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between">
+              <div key={t.id} className="bg-rose-950/20 border border-rose-500/40 rounded-2xl p-4 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-3 truncate">
                   <button 
                     onClick={() => {
@@ -1525,7 +1697,7 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
                     onReward('+25 XP');
                     dispatch({ type: 'TOGGLE_TASK', payload: t.id });
                   }}
-                  className="px-3.5 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-lg hover:bg-rose-500 hover:text-white transition-all shrink-0 ml-2"
+                  className="min-h-[40px] px-3.5 py-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold rounded-lg hover:bg-rose-500 hover:text-white transition-all shrink-0 ml-2"
                 >
                   Done
                 </button>
@@ -1590,7 +1762,7 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
       </div>
 
       {/* Add Task Card */}
-      <form onSubmit={handleAddTask} className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 space-y-3">
+      <form onSubmit={handleAddTask} className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-4 sm:p-5 space-y-3">
         <div className="flex flex-col sm:flex-row gap-3">
           <input 
             ref={taskInputRef}
@@ -1605,7 +1777,7 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
             <select 
               value={priority}
               onChange={e => setPriority(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-xs text-zinc-300 focus:outline-none"
+              className="bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-xs text-zinc-300 focus:outline-none min-h-[44px]"
             >
               <option value="urgent">Urgent 🔥</option>
               <option value="high">High ⚡</option>
@@ -1614,7 +1786,7 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
 
             <button 
               type="submit" 
-              className="bg-violet-500 text-white px-6 py-3 rounded-2xl font-bold hover:bg-violet-600 transition-colors touch-target shadow-lg flex items-center gap-1.5 shrink-0"
+              className="min-h-[44px] bg-violet-500 text-white px-6 py-3 rounded-2xl font-bold hover:bg-violet-600 transition-colors touch-target shadow-lg flex items-center gap-1.5 shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Add</span>
@@ -1628,19 +1800,19 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
         <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-2xl border border-zinc-800/80 text-xs">
           <button 
             onClick={() => setFilter('all')}
-            className={`px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'all' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            className={`min-h-[36px] px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'all' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             All ({state.tasks.length})
           </button>
           <button 
             onClick={() => setFilter('pending')}
-            className={`px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'pending' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            className={`min-h-[36px] px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'pending' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Pending ({state.tasks.filter(t => !t.completed).length})
           </button>
           <button 
             onClick={() => setFilter('completed')}
-            className={`px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'completed' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            className={`min-h-[36px] px-4 py-1.5 rounded-xl font-bold transition-all ${filter === 'completed' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Completed ({state.tasks.filter(t => t.completed).length})
           </button>
@@ -1665,7 +1837,7 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
                     if (!t.completed) onReward('+25 XP');
                     dispatch({ type: 'TOGGLE_TASK', payload: t.id });
                   }} 
-                  className="text-zinc-500 hover:text-violet-400 transition-colors touch-target p-1 shrink-0"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-500 hover:text-violet-400 transition-colors touch-target p-1 shrink-0"
                 >
                   {t.completed ? <CheckCircle2 className="w-5 h-5 text-violet-400" /> : <Circle className="w-5 h-5" />}
                 </button>
@@ -1676,26 +1848,26 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
                       {t.priority}
                     </span>
                   )}
-                  {/* High contrast readable text */}
                   <span className={`text-sm font-medium transition-all truncate ${t.completed ? 'line-through text-zinc-400' : 'text-zinc-100'}`}>
                     {t.text}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {!t.completed && (
                   <button 
                     onClick={() => dispatch({ type: 'START_TIMER_FOR_TOPIC', payload: { topic: t.text } })}
                     title="Focus on this task now"
-                    className="p-2.5 rounded-xl bg-zinc-950 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 border border-zinc-800/80 transition-colors"
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-zinc-950 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 border border-zinc-800/80 transition-colors"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                   </button>
                 )}
                 <button 
                   onClick={() => dispatch({ type: 'DELETE_TASK', payload: t.id })} 
-                  className="text-zinc-600 hover:text-rose-400 p-2 touch-target transition-colors"
+                  className="min-h-[40px] min-w-[40px] flex items-center justify-center text-zinc-600 hover:text-rose-400 touch-target transition-colors"
+                  title="Delete task"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -1710,6 +1882,232 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
         )}
       </div>
 
+    </div>
+  );
+};
+
+// ==========================================
+// CLOUD SYNC & DEVICE LINK MODAL
+// ==========================================
+const CloudSyncModal = ({ isOpen, onClose, state, dispatch, onReward, syncStatus, onForceSync }) => {
+  const [inputPin, setInputPin] = useState(state.syncPin || '');
+  const [copied, setCopied] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [showSupabase, setShowSupabase] = useState(false);
+  const [sbUrl, setSbUrl] = useState('');
+  const [sbKey, setSbKey] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const cfg = localStorage.getItem(SUPABASE_CONFIG_KEY);
+      if (cfg) {
+        try {
+          const parsed = JSON.parse(cfg);
+          setSbUrl(parsed.url || '');
+          setSbKey(parsed.anonKey || '');
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  const generateRandomPin = () => {
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    setInputPin(pin);
+    dispatch({ type: 'SET_SYNC_PIN', payload: pin });
+  };
+
+  const handleCopy = () => {
+    if (!state.syncPin) return;
+    navigator.clipboard.writeText(state.syncPin);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLinkDevice = async () => {
+    const pin = inputPin.trim();
+    if (pin.length < 4) {
+      setFeedback({ type: 'error', msg: 'Enter at least 4 digits/characters' });
+      return;
+    }
+
+    setSyncing(true);
+    setFeedback(null);
+    dispatch({ type: 'SET_SYNC_PIN', payload: pin });
+
+    // Try pulling state from cloud first
+    const pullRes = await CloudSyncManager.pullState(pin, { url: sbUrl, anonKey: sbKey });
+    if (pullRes.success && pullRes.data) {
+      dispatch({ type: 'SET_STATE', payload: pullRes.data });
+      dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
+      setFeedback({ type: 'success', msg: 'Connected & Synced cloud data to this device!' });
+      onReward('Cloud Synced');
+    } else {
+      // If no remote data, push our current local state up
+      const pushRes = await CloudSyncManager.pushState(pin, state, { url: sbUrl, anonKey: sbKey });
+      if (pushRes.success) {
+        dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
+        setFeedback({ type: 'success', msg: `PIN Linked! Local state pushed to cloud.` });
+        onReward('PIN Active');
+      } else {
+        setFeedback({ type: 'error', msg: 'Cloud unreachable. Saved PIN locally.' });
+      }
+    }
+    setSyncing(false);
+  };
+
+  const handleSaveSupabase = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify({ url: sbUrl.trim(), anonKey: sbKey.trim() }));
+      setFeedback({ type: 'success', msg: 'Custom Supabase credentials saved!' });
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+      <div 
+        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-scale-in max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="flex items-center gap-2 text-zinc-100 font-bold text-sm">
+            <Cloud className="w-5 h-5 text-cyan-400" />
+            <span>Cross-Device Cloud Sync & Device Link</span>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Sync Status Banner */}
+        <div className="flex items-center justify-between p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : syncStatus === 'syncing' ? 'bg-amber-400 animate-ping' : 'bg-zinc-600'}`}></div>
+            <div>
+              <div className="text-xs font-bold text-zinc-200">
+                {state.syncPin ? `Linked PIN: ${state.syncPin}` : 'Not Linked to Cloud'}
+              </div>
+              <div className="text-[10px] text-zinc-500 font-mono">
+                {state.lastSynced ? `Last sync: ${new Date(state.lastSynced).toLocaleTimeString()}` : 'Offline / Local-first fallback active'}
+              </div>
+            </div>
+          </div>
+
+          {state.syncPin && (
+            <button 
+              onClick={onForceSync}
+              disabled={syncing}
+              className="px-3 py-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold hover:bg-cyan-500/30 transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              <span>Sync Now</span>
+            </button>
+          )}
+        </div>
+
+        {/* 6-Digit PIN Pairing */}
+        <div className="space-y-3 bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/80">
+          <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
+            <span className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-cyan-400" />
+              Instant 6-Digit Device Link (Phone & PC)
+            </span>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Type the same PIN on your Phone (Samsung Galaxy) and PC to sync all timer sessions, tasks, and spaced repetition instantly.
+          </p>
+
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              maxLength={12}
+              placeholder="e.g. 742918 or my-secret-pin" 
+              value={inputPin}
+              onChange={e => setInputPin(e.target.value)}
+              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm font-mono text-cyan-300 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/60"
+            />
+            <button 
+              onClick={generateRandomPin}
+              className="px-3 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-bold rounded-xl"
+              title="Generate 6-digit random PIN"
+            >
+              Random
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={handleLinkDevice}
+              disabled={syncing}
+              className="flex-1 py-2.5 bg-cyan-500 text-zinc-950 font-bold text-xs rounded-xl hover:bg-cyan-400 transition-colors flex items-center justify-center gap-2 shadow-lg"
+            >
+              <Cloud className="w-4 h-4" />
+              <span>{syncing ? 'Connecting...' : 'Connect & Link This Device'}</span>
+            </button>
+
+            {state.syncPin && (
+              <button 
+                onClick={handleCopy}
+                className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold rounded-xl hover:bg-zinc-800 flex items-center gap-1.5"
+              >
+                {copied ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {feedback && (
+          <div className={`p-3 rounded-xl text-xs font-bold text-center border ${feedback.type === 'success' ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40' : 'bg-rose-950/40 text-rose-300 border-rose-500/40'}`}>
+            {feedback.msg}
+          </div>
+        )}
+
+        {/* Optional Custom Supabase Configuration */}
+        <div className="border-t border-zinc-800 pt-3">
+          <button 
+            onClick={() => setShowSupabase(!showSupabase)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center justify-between w-full font-bold"
+          >
+            <span className="flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5 text-violet-400" />
+              Custom Supabase Database (Optional / Self-Hosted)
+            </span>
+            <span>{showSupabase ? '▲' : '▼'}</span>
+          </button>
+
+          {showSupabase && (
+            <div className="space-y-3 mt-3 p-3.5 bg-zinc-900/50 rounded-2xl border border-zinc-800/80 text-xs">
+              <p className="text-zinc-500 text-[11px]">
+                Connect your private Supabase project. Table: <code className="text-violet-400 font-mono">study_sync (pin text primary key, data jsonb, updated_at timestamp)</code>.
+              </p>
+              <input 
+                type="text" 
+                placeholder="Supabase Project URL (https://xyz.supabase.co)" 
+                value={sbUrl}
+                onChange={e => setSbUrl(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none"
+              />
+              <input 
+                type="password" 
+                placeholder="Supabase Anon Public API Key" 
+                value={sbKey}
+                onChange={e => setSbKey(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none"
+              />
+              <button 
+                onClick={handleSaveSupabase}
+                className="w-full py-2 bg-violet-500/20 text-violet-300 border border-violet-500/40 rounded-xl text-xs font-bold hover:bg-violet-500/30"
+              >
+                Save Supabase Credentials
+              </button>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 };
@@ -1809,21 +2207,26 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, null, () => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY);
+      const savedPin = localStorage.getItem(SYNC_STORAGE_KEY) || '';
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          return { ...getCleanState(), ...parsed };
+          return { ...getCleanState(), ...parsed, syncPin: savedPin || parsed.syncPin || '' };
         } catch (e) {
           console.error("Failed to parse local storage", e);
         }
       }
+      if (savedPin) return { ...getCleanState(), syncPin: savedPin };
     }
     return getCleanState();
   });
 
   const [rewardTicker, setRewardTicker] = useState(null);
   const [hudOpen, setHudOpen] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'error'
   const taskInputRef = useRef(null);
+  const isSyncingRef = useRef(false);
 
   const showReward = useCallback((label) => {
     setRewardTicker({ label, id: Date.now() });
@@ -1836,10 +2239,74 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (state.syncPin) localStorage.setItem(SYNC_STORAGE_KEY, state.syncPin);
     } catch (e) {
       console.error("LocalStorage write error", e);
     }
   }, [state]);
+
+  // Debounced Cloud Sync Push
+  const syncDebounceTimer = useRef(null);
+  useEffect(() => {
+    if (!state.syncPin || isSyncingRef.current) return;
+
+    if (syncDebounceTimer.current) clearTimeout(syncDebounceTimer.current);
+    syncDebounceTimer.current = setTimeout(async () => {
+      let customSb = null;
+      try {
+        const cfg = localStorage.getItem(SUPABASE_CONFIG_KEY);
+        if (cfg) customSb = JSON.parse(cfg);
+      } catch (e) {}
+
+      setSyncStatus('syncing');
+      const res = await CloudSyncManager.pushState(state.syncPin, state, customSb);
+      if (res.success) {
+        setSyncStatus('synced');
+        dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
+      } else {
+        setSyncStatus('error');
+      }
+    }, 1500);
+
+    return () => {
+      if (syncDebounceTimer.current) clearTimeout(syncDebounceTimer.current);
+    };
+  }, [state.sessions, state.topics, state.tasks, state.xp, state.streak, state.dailyTargetHours, state.syncPin]);
+
+  // Auto Cloud Sync Pull on Window Focus & Mount
+  const performCloudPull = useCallback(async () => {
+    if (!state.syncPin || isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    setSyncStatus('syncing');
+
+    let customSb = null;
+    try {
+      const cfg = localStorage.getItem(SUPABASE_CONFIG_KEY);
+      if (cfg) customSb = JSON.parse(cfg);
+    } catch (e) {}
+
+    const res = await CloudSyncManager.pullState(state.syncPin, customSb);
+    if (res.success && res.data) {
+      // Merge or update state if remote data is newer or has more sessions
+      dispatch({ type: 'SET_STATE', payload: res.data });
+      dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
+      setSyncStatus('synced');
+    } else {
+      setSyncStatus('idle');
+    }
+    isSyncingRef.current = false;
+  }, [state.syncPin]);
+
+  useEffect(() => {
+    if (state.syncPin) {
+      performCloudPull();
+    }
+    const handleFocus = () => {
+      if (state.syncPin) performCloudPull();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [state.syncPin, performCloudPull]);
 
   // Live Timer Count
   const timerRef = useRef(null);
@@ -1884,6 +2351,7 @@ export default function App() {
       }
       if (e.key === 'Escape') {
         setHudOpen(false);
+        setSyncModalOpen(false);
         document.activeElement?.blur();
       }
     };
@@ -1916,6 +2384,17 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Cloud Sync Modal */}
+      <CloudSyncModal 
+        isOpen={syncModalOpen} 
+        onClose={() => setSyncModalOpen(false)} 
+        state={state} 
+        dispatch={dispatch} 
+        onReward={showReward}
+        syncStatus={syncStatus}
+        onForceSync={performCloudPull}
+      />
 
       {/* Shortcuts & Reset Modal */}
       <ShortcutsModal 
@@ -1996,8 +2475,10 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-screen">
         
-        {/* Top Header Bar */}
-        <header className="w-full border-b border-zinc-800/60 bg-[#09090b]/80 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+        {/* Precision Centered Top Header Bar */}
+        <header className="w-full border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 min-h-[56px]">
+          
+          {/* Left Title / Branding */}
           <div className="flex items-center gap-2 font-bold tracking-wider text-xs sm:text-sm text-zinc-100">
             <span className="md:hidden flex items-center gap-1.5">
               <Zap className="w-4 h-4 text-emerald-400" />
@@ -2008,12 +2489,25 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Hard Reset Button */}
+          {/* Right Action Icons - Vertically Centered with consistent h-9 heights */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            
+            {/* Cloud Sync Button */}
+            <button 
+              onClick={() => setSyncModalOpen(true)}
+              title="Cloud Sync & Device Link"
+              className={`h-9 px-3 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 ${state.syncPin ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+            >
+              <Cloud className="w-4 h-4" />
+              <span className="hidden sm:inline font-mono">{state.syncPin ? state.syncPin : 'Sync'}</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-400' : syncStatus === 'syncing' ? 'bg-amber-400 animate-ping' : state.syncPin ? 'bg-cyan-400' : 'bg-zinc-600'}`}></div>
+            </button>
+
+            {/* Shortcuts Help Button */}
             <button 
               onClick={() => setHudOpen(true)}
-              title="Reset Data & Shortcuts (?)"
-              className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors touch-target flex items-center justify-center"
+              title="Keyboard Shortcuts & Hard Reset (?)"
+              className="h-9 w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors flex items-center justify-center"
             >
               <HelpCircle className="w-4 h-4" />
             </button>
@@ -2022,7 +2516,7 @@ export default function App() {
             <button 
               onClick={() => dispatch({ type: 'TOGGLE_AUDIO' })}
               title={state.audioEnabled ? "Mute SFX" : "Enable SFX"}
-              className={`p-2 rounded-full border transition-all touch-target ${state.audioEnabled ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
+              className={`h-9 w-9 rounded-xl border transition-all flex items-center justify-center ${state.audioEnabled ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
             >
               {state.audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
@@ -2030,10 +2524,10 @@ export default function App() {
             {/* Emergency Mode Toggle */}
             <button 
               onClick={() => dispatch({ type: 'TOGGLE_EMERGENCY' })}
-              className={`flex items-center px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all touch-target border ${isEmergency ? 'bg-rose-500 text-white border-rose-400 glow-rose animate-pulse shadow-lg' : 'bg-zinc-900 text-rose-400/80 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300'}`}
+              className={`h-9 flex items-center px-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${isEmergency ? 'bg-rose-500 text-white border-rose-400 glow-rose animate-pulse shadow-lg' : 'bg-zinc-900 text-rose-400/80 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300'}`}
             >
-              <AlertCircle className="w-4 h-4 mr-1.5" />
-              {isEmergency ? 'Exit Buffer' : 'Emergency Mode'}
+              <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
+              <span className="hidden xs:inline">{isEmergency ? 'Exit' : 'Emergency'}</span>
             </button>
           </div>
         </header>
@@ -2045,7 +2539,7 @@ export default function App() {
           ) : (
             <>
               {state.activeTab === 'focus' && <FocusEngine state={state} dispatch={dispatch} onReward={showReward} />}
-              {state.activeTab === 'stats' && <Analytics state={state} />}
+              {state.activeTab === 'stats' && <Analytics state={state} dispatch={dispatch} />}
               {state.activeTab === 'heatmap' && <SurvivalHeatmap state={state} />}
               {state.activeTab === 'spaced' && <SpacedRepetition state={state} dispatch={dispatch} onReward={showReward} />}
               {state.activeTab === 'hitlist' && <HitList state={state} dispatch={dispatch} onReward={showReward} taskInputRef={taskInputRef} />}
