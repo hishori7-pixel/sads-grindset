@@ -19,29 +19,47 @@
   --color-neon-cyan-dim: #064d5c;
   --color-neon-rose: #f43f5e;
   --color-neon-rose-dim: #6b1728;
+  --color-neon-teal: #14b8a6;
+  --color-neon-teal-dim: #0f766e;
   --color-text-primary: #f4f4f5;
   --color-text-secondary: #a1a1aa;
   --color-text-muted: #52525b;
 }
 
+/* === Viewport & Overflow Safety === */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+  touch-action: pan-y;
+  background-color: #09090b;
+  color: #f4f4f5;
+}
+
+#root {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100vh;
+}
+
 /* === Scrollbar === */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
 
 /* === Glow Keyframes === */
 @keyframes pulse-glow-emerald {
-  0%, 100% { box-shadow: 0 0 15px 2px rgba(16, 185, 129, 0.3); }
-  50% { box-shadow: 0 0 30px 6px rgba(16, 185, 129, 0.5); }
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(16, 185, 129, 0.25); }
+  50% { box-shadow: 0 0 25px 5px rgba(16, 185, 129, 0.45); }
 }
 @keyframes pulse-glow-rose {
-  0%, 100% { box-shadow: 0 0 15px 2px rgba(244, 63, 94, 0.3); }
-  50% { box-shadow: 0 0 30px 6px rgba(244, 63, 94, 0.5); }
-}
-@keyframes pulse-glow-violet {
-  0%, 100% { box-shadow: 0 0 12px 2px rgba(139, 92, 246, 0.2); }
-  50% { box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.4); }
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(244, 63, 94, 0.25); }
+  50% { box-shadow: 0 0 25px 5px rgba(244, 63, 94, 0.45); }
 }
 @keyframes pulse-glow-cyan {
   0%, 100% { box-shadow: 0 0 12px 2px rgba(6, 182, 212, 0.2); }
@@ -51,6 +69,10 @@
   0%, 100% { box-shadow: 0 0 12px 2px rgba(245, 158, 11, 0.2); }
   50% { box-shadow: 0 0 20px 4px rgba(245, 158, 11, 0.4); }
 }
+@keyframes pulse-glow-teal {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(20, 184, 166, 0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(20, 184, 166, 0.4); }
+}
 @keyframes float-up {
   0% { opacity: 0; transform: translate(-50%, 10px) scale(0.8); }
   20% { opacity: 1; transform: translate(-50%, -10px) scale(1.1); }
@@ -58,23 +80,23 @@
   100% { opacity: 0; transform: translate(-50%, -50px) scale(0.9); }
 }
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.96); }
+  from { opacity: 0; transform: scale(0.97); }
   to { opacity: 1; transform: scale(1); }
 }
 
-.animate-fade-in { animation: fade-in 0.25s ease-out; }
-.animate-scale-in { animation: scale-in 0.2s ease-out; }
-.animate-float-up { animation: float-up 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-scale-in { animation: scale-in 0.15s ease-out; }
+.animate-float-up { animation: float-up 2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
 .glow-emerald { animation: pulse-glow-emerald 2s ease-in-out infinite; }
 .glow-rose { animation: pulse-glow-rose 2s ease-in-out infinite; }
-.glow-violet { animation: pulse-glow-violet 2.5s ease-in-out infinite; }
 .glow-cyan { animation: pulse-glow-cyan 2.5s ease-in-out infinite; }
 .glow-amber { animation: pulse-glow-amber 2.5s ease-in-out infinite; }
+.glow-teal { animation: pulse-glow-teal 2.5s ease-in-out infinite; }
 
 /* === Touch feedback === */
 .touch-target {
@@ -90,5 +112,5 @@
 
 /* === Safe areas === */
 .safe-bottom {
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 14px);
 }

@@ -245,7 +245,7 @@ const formatTime = (totalSeconds) => {
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const SUBJECTS = ['Math', 'Physics', 'Chemistry', 'Biology', 'Arabic', 'English'];
+const SUBJECTS = ['Math', 'Physics', 'Chemistry', 'Biology', 'Arabic', 'English', 'Islamiya'];
 
 const SUBJECT_THEMES = {
   Math: {
@@ -307,6 +307,16 @@ const SUBJECT_THEMES = {
     glow: 'shadow-[0_0_50px_rgba(59,130,246,0.35)]',
     pillActive: 'bg-blue-500/20 text-blue-300 border-blue-500/60 shadow-[0_0_15px_rgba(59,130,246,0.2)]',
     bar: 'bg-blue-500'
+  },
+  Islamiya: {
+    color: 'teal',
+    text: 'text-teal-400',
+    border: 'border-teal-500/40',
+    bg: 'bg-teal-500/10',
+    ring: 'stroke-teal-400',
+    glow: 'shadow-[0_0_50px_rgba(20,184,166,0.35)]',
+    pillActive: 'bg-teal-500/20 text-teal-300 border-teal-500/60 shadow-[0_0_15px_rgba(20,184,166,0.2)]',
+    bar: 'bg-teal-500'
   }
 };
 
@@ -604,8 +614,8 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animate-fade-in pb-28">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+    <div className="w-full max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 animate-fade-in pb-28 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start w-full">
         
         {/* LEFT COLUMN: LIVE FOCUS DIAL & SUBJECT CONSOLE (7 cols) */}
         <div className="lg:col-span-7 flex flex-col items-center justify-center bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-5 sm:p-8 shadow-2xl relative">
@@ -687,15 +697,15 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
               <span className="text-zinc-600 font-mono">Real-Time Sync</span>
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
               {SUBJECTS.map(sub => {
                 const isSelected = state.activeSubject === sub;
-                const theme = SUBJECT_THEMES[sub];
+                const theme = SUBJECT_THEMES[sub] || SUBJECT_THEMES.Math;
                 return (
                   <button
                     key={sub}
                     onClick={() => dispatch({ type: 'SET_SUBJECT', payload: sub })}
-                    className={`py-2 px-1 rounded-xl text-xs font-semibold transition-all touch-target border text-center ${isSelected ? theme.pillActive : 'bg-zinc-900/60 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'}`}
+                    className={`py-2 px-1 rounded-xl text-[11px] sm:text-xs font-semibold transition-all touch-target border text-center ${isSelected ? theme.pillActive : 'bg-zinc-900/60 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'}`}
                   >
                     {sub}
                   </button>
@@ -881,10 +891,10 @@ const Analytics = ({ state, dispatch }) => {
   const rankInfo = getRankInfo(state.xp);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in pb-28">
+    <div className="w-full max-w-7xl mx-auto space-y-5 animate-fade-in pb-28 px-3 sm:px-6 overflow-hidden">
       
       {/* 4 Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
         <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
             <span>Today</span>
@@ -1195,9 +1205,9 @@ const SurvivalHeatmap = ({ state }) => {
   }, [grid, cols]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in pb-28">
+    <div className="w-full max-w-7xl mx-auto space-y-5 animate-fade-in pb-28 px-3 sm:px-6 overflow-hidden">
       
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-5">
+      <div className="w-full bg-zinc-900/40 border border-zinc-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 overflow-hidden">
         
         {/* Header with Timeline & Range Selectors */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/60 pb-4">
@@ -1434,16 +1444,16 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
     const currentStageInfo = SR_STAGES[stageNum - 1] || SR_STAGES[0];
 
     return (
-      <div className={`p-4 sm:p-5 rounded-2xl transition-all border ${isDue ? 'bg-cyan-950/20 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)] glow-cyan' : isMastered ? 'bg-zinc-900/30 border-zinc-800/40 opacity-75' : 'bg-zinc-900/60 border-zinc-800/80'}`}>
-        <div className="flex flex-col gap-4">
+      <div className={`w-full max-w-full overflow-hidden p-4 sm:p-5 rounded-2xl transition-all border ${isDue ? 'bg-cyan-950/20 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)] glow-cyan' : isMastered ? 'bg-zinc-900/30 border-zinc-800/40 opacity-75' : 'bg-zinc-900/60 border-zinc-800/80'}`}>
+        <div className="flex flex-col gap-3.5 w-full">
           
           {/* Header & Badges */}
-          <div className="space-y-2">
+          <div className="space-y-2 w-full">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${theme.pillActive}`}>
                 {topic.subject}
               </span>
-              <span className="text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] sm:text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded-md truncate max-w-[200px]">
                 Stage {stageNum}/7: {currentStageInfo.name}
               </span>
               {isDue && (
@@ -1453,10 +1463,10 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
               )}
             </div>
 
-            <h4 className="text-zinc-100 font-bold text-base sm:text-lg break-words">{topic.name}</h4>
+            <h4 className="text-zinc-100 font-bold text-sm sm:text-base break-words leading-snug">{topic.name}</h4>
 
             {/* Stage Progress Bar */}
-            <div className="flex items-center gap-2 max-w-md pt-1">
+            <div className="flex items-center gap-2 w-full pt-1">
               <div className="flex-1 h-1.5 bg-zinc-950 rounded-full overflow-hidden flex gap-0.5">
                 {[1, 2, 3, 4, 5, 6, 7].map(stg => (
                   <div 
@@ -1472,19 +1482,19 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
           </div>
 
           {/* Action Row - Mobile responsive wrap with 44px tap targets */}
-          <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60 flex-wrap sm:flex-nowrap justify-between">
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial">
-              {/* Inline Quick Focus Play Button */}
+          <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60 justify-between w-full">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {/* Quick Focus Button */}
               <button 
                 onClick={() => dispatch({ 
                   type: 'START_TIMER_FOR_TOPIC', 
                   payload: { subject: topic.subject, topic: `Spaced Recall: ${topic.name}` } 
                 })}
                 title="Focus on this topic now"
-                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all touch-target flex items-center justify-center gap-1.5 text-xs font-semibold"
+                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all touch-target flex items-center justify-center gap-1.5 text-xs font-semibold shrink-0"
               >
-                <Play className="w-4 h-4 fill-current" />
-                <span className="sm:hidden">Focus</span>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Focus</span>
               </button>
 
               {isDue && (
@@ -1493,17 +1503,17 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
                     onReward('+50 XP');
                     dispatch({ type: 'REVIEW_TOPIC', payload: topic.id });
                   }}
-                  className="min-h-[44px] flex-1 sm:flex-initial px-4 py-2.5 bg-cyan-500 text-zinc-950 font-extrabold text-xs rounded-xl hover:bg-cyan-400 transition-all touch-target shadow-lg flex items-center justify-center gap-1.5"
+                  className="min-h-[44px] flex-1 px-3 py-2 bg-cyan-500 text-zinc-950 font-extrabold text-xs rounded-xl hover:bg-cyan-400 transition-all touch-target shadow-lg flex items-center justify-center gap-1.5 truncate"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Reviewed & Cleared</span>
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Reviewed (+50 XP)</span>
                 </button>
               )}
             </div>
 
             <button 
               onClick={() => dispatch({ type: 'DELETE_TOPIC', payload: topic.id })}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-zinc-600 hover:text-rose-400 transition-colors rounded-xl"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-zinc-600 hover:text-rose-400 transition-colors rounded-xl shrink-0"
               title="Delete topic"
             >
               <Trash2 className="w-4 h-4" />
@@ -1516,13 +1526,13 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-fade-in pb-28">
+    <div className="w-full max-w-4xl mx-auto space-y-5 animate-fade-in pb-28 px-3 sm:px-6 overflow-hidden">
       
       {/* Top Header Notification Alert */}
       {dueTopics.length > 0 && (
-        <div className="bg-cyan-950/30 border border-cyan-500/50 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-[0_0_25px_rgba(6,182,212,0.15)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-cyan-500/20 rounded-xl text-cyan-400">
+        <div className="w-full bg-cyan-950/30 border border-cyan-500/50 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-[0_0_25px_rgba(6,182,212,0.15)]">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="p-2 bg-cyan-500/20 rounded-xl text-cyan-400 shrink-0">
               <BellRing className="w-5 h-5 animate-bounce" />
             </div>
             <div>
@@ -1530,14 +1540,14 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
                 {dueTopics.length} Review{dueTopics.length === 1 ? '' : 's'} Due Today!
               </div>
               <div className="text-xs text-cyan-400/70">
-                Active recall window is open. Review now to lock into permanent storage.
+                Active recall window is open. Review now to lock into memory.
               </div>
             </div>
           </div>
 
           <button 
             onClick={requestBrowserNotification}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors shrink-0"
+            className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors shrink-0"
           >
             {state.notificationsEnabled ? '✓ Alerts Active' : 'Enable Device Alerts'}
           </button>
@@ -1545,86 +1555,71 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
       )}
 
       {/* Add Topic Form */}
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-zinc-400">
+      <div className="w-full bg-zinc-900/40 border border-zinc-800/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5">
+        <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
           <span className="flex items-center gap-2">
             <Brain className="w-4 h-4 text-cyan-400" />
-            Schedule Topic in 7-Stage Forgetting Curve Engine
+            Schedule Spaced Recall
           </span>
-          <span className="text-zinc-600 font-mono hidden sm:inline">+1d, +3d, +7d, +14d, +30d, +60d, +90d</span>
+          <span className="text-[10px] text-zinc-500 font-mono">7 Retention Stages</span>
         </div>
 
-        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2.5 w-full">
           <select 
             value={subject} 
             onChange={e => setSubject(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-cyan-500/60 sm:w-44"
+            className="w-full sm:w-36 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-3 text-xs sm:text-sm text-zinc-200 focus:outline-none focus:border-cyan-500 min-h-[44px]"
           >
             {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <input 
             type="text" 
-            placeholder="Enter chapter / concept name (e.g. Organic Reaction Conditions)..." 
+            placeholder="Chapter or concept (e.g. Acid-Base Equilibrium)..." 
             value={topicName}
             onChange={e => setTopicName(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/60 flex-1"
+            className="flex-1 w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs sm:text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500 min-h-[44px]"
           />
           <button 
             type="submit" 
-            className="min-h-[44px] bg-cyan-500 text-zinc-950 px-6 py-3 rounded-xl font-bold hover:bg-cyan-400 transition-colors touch-target flex items-center justify-center gap-2 shadow-lg"
+            className="w-full sm:w-auto min-h-[44px] px-5 py-3 bg-cyan-500 text-zinc-950 font-bold text-xs sm:text-sm rounded-xl hover:bg-cyan-400 transition-colors flex items-center justify-center gap-1.5 shrink-0"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             <span>Add Topic</span>
           </button>
         </form>
-
-        {/* 7 Mastery Stages Pill Preview */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-1">
-          {SR_STAGES.map((stg) => (
-            <div 
-              key={stg.level} 
-              className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-500 whitespace-nowrap"
-            >
-              <strong className="text-cyan-400">L{stg.level}:</strong> {stg.name} ({stg.desc})
-            </div>
-          ))}
-        </div>
       </div>
 
-      {/* Section Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2 overflow-x-auto">
+      {/* Segmented Filter Tabs */}
+      <div className="grid grid-cols-3 gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800/80 w-full text-xs font-bold">
         <button 
           onClick={() => setActiveTabFilter('due')}
-          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'due' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-md' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] py-2 px-1 rounded-lg transition-all text-center truncate ${activeTabFilter === 'due' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Zap className="w-4 h-4 text-cyan-400" />
-          <span>Due Today ({dueTopics.length})</span>
+          Due ({dueTopics.length})
         </button>
         <button 
           onClick={() => setActiveTabFilter('pipeline')}
-          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'pipeline' ? 'bg-zinc-800 text-zinc-100 border border-zinc-700' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] py-2 px-1 rounded-lg transition-all text-center truncate ${activeTabFilter === 'pipeline' ? 'bg-zinc-800 text-zinc-100 border border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Calendar className="w-4 h-4 text-zinc-400" />
-          <span>Active Pipeline ({upcomingTopics.length})</span>
+          Active ({upcomingTopics.length})
         </button>
         <button 
           onClick={() => setActiveTabFilter('mastered')}
-          className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${activeTabFilter === 'mastered' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`min-h-[40px] py-2 px-1 rounded-lg transition-all text-center truncate ${activeTabFilter === 'mastered' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
-          <Award className="w-4 h-4 text-emerald-400" />
-          <span>Mastered ({masteredTopics.length})</span>
+          Mastered ({masteredTopics.length})
         </button>
       </div>
 
       {/* Main List */}
-      <div className="space-y-3">
+      <div className="space-y-3 w-full">
         {activeTabFilter === 'due' && (
           <>
             {dueTopics.map(t => <TopicCard key={t.id} topic={t} />)}
             {dueTopics.length === 0 && (
-              <div className="p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-sm">
-                <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-500/60 mb-3" />
-                <div className="font-bold text-zinc-300">All Spaced Reviews Cleared!</div>
+              <div className="p-8 sm:p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-sm">
+                <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 mx-auto text-emerald-500/60 mb-2 sm:mb-3" />
+                <div className="font-bold text-zinc-300 text-sm sm:text-base">All Spaced Reviews Cleared!</div>
                 <div className="text-xs text-zinc-500 mt-1">No items currently due for recall today.</div>
               </div>
             )}
@@ -1635,7 +1630,7 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
           <>
             {upcomingTopics.map(t => <TopicCard key={t.id} topic={t} />)}
             {upcomingTopics.length === 0 && (
-              <div className="p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-sm">
+              <div className="p-8 sm:p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-xs sm:text-sm">
                 No upcoming reviews in the pipeline. Add topics above to begin!
               </div>
             )}
@@ -1646,7 +1641,7 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
           <>
             {masteredTopics.map(t => <TopicCard key={t.id} topic={t} />)}
             {masteredTopics.length === 0 && (
-              <div className="p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-sm">
+              <div className="p-8 sm:p-12 text-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-xs sm:text-sm">
                 No mastered topics yet. Advance through all 7 stages to achieve permanent mastery!
               </div>
             )}
@@ -1666,7 +1661,7 @@ const EmergencyBuffer = ({ state, dispatch, onReward }) => {
   const pendingTasks = state.tasks.filter(t => !t.completed);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-8 pb-28 animate-scale-in">
+    <div className="w-full max-w-4xl mx-auto space-y-6 pb-28 px-3 sm:px-6 animate-scale-in overflow-hidden">
       
       <div className="text-center p-6 sm:p-8 bg-rose-950/30 border border-rose-500/60 rounded-3xl glow-rose shadow-2xl">
         <AlertCircle className="w-14 h-14 sm:w-16 sm:h-16 text-rose-500 mx-auto mb-3 animate-pulse" />
@@ -1792,10 +1787,10 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
   }, [state.tasks, filter]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-fade-in pb-28">
+    <div className="w-full max-w-4xl mx-auto space-y-5 animate-fade-in pb-28 px-3 sm:px-6 overflow-hidden">
       
       {/* Header & Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4 w-full">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
             <ListChecks className="w-6 h-6 text-violet-400" />
