@@ -788,13 +788,13 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
           </div>
 
           {/* Subject & Custom Topic Selector */}
-          <div className="w-full max-w-lg bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-4 space-y-3 mt-2">
+          <div className="w-full max-w-xl bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-3.5 sm:p-4 space-y-3 mt-2">
             <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-zinc-500">
               <span>Target Subject</span>
               <span className="text-zinc-600 font-mono">Real-Time Sync</span>
             </div>
 
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 sm:gap-1.5 w-full">
               {SUBJECTS.map(sub => {
                 const isSelected = state.activeSubject === sub;
                 const theme = SUBJECT_THEMES[sub] || SUBJECT_THEMES.Math;
@@ -802,9 +802,10 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
                   <button
                     key={sub}
                     onClick={() => dispatch({ type: 'SET_SUBJECT', payload: sub })}
-                    className={`py-2 px-1 rounded-xl text-[11px] sm:text-xs font-semibold transition-all touch-target border text-center ${isSelected ? theme.pillActive : 'bg-zinc-900/60 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'}`}
+                    className={`py-2 px-0.5 sm:px-1 rounded-xl text-[10px] sm:text-[11px] lg:text-xs font-semibold tracking-tight transition-all touch-target border text-center flex items-center justify-center truncate ${isSelected ? theme.pillActive : 'bg-zinc-900/60 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'}`}
+                    title={sub}
                   >
-                    {sub}
+                    <span className="truncate">{sub}</span>
                   </button>
                 );
               })}
