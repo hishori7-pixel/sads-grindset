@@ -73,6 +73,14 @@ html, body {
   0%, 100% { box-shadow: 0 0 12px 2px rgba(20, 184, 166, 0.2); }
   50% { box-shadow: 0 0 20px 4px rgba(20, 184, 166, 0.4); }
 }
+@keyframes pulse-glow-violet {
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(139, 92, 246, 0.25); }
+  50% { box-shadow: 0 0 25px 5px rgba(139, 92, 246, 0.45); }
+}
+@keyframes pulse-glow-blue {
+  0%, 100% { box-shadow: 0 0 15px 2px rgba(59, 130, 246, 0.25); }
+  50% { box-shadow: 0 0 25px 5px rgba(59, 130, 246, 0.45); }
+}
 @keyframes float-up {
   0% { opacity: 0; transform: translate(-50%, 10px) scale(0.8); }
   20% { opacity: 1; transform: translate(-50%, -10px) scale(1.1); }
@@ -97,6 +105,8 @@ html, body {
 .glow-cyan { animation: pulse-glow-cyan 2.5s ease-in-out infinite; }
 .glow-amber { animation: pulse-glow-amber 2.5s ease-in-out infinite; }
 .glow-teal { animation: pulse-glow-teal 2.5s ease-in-out infinite; }
+.glow-violet { animation: pulse-glow-violet 2.5s ease-in-out infinite; }
+.glow-blue { animation: pulse-glow-blue 2.5s ease-in-out infinite; }
 
 /* === Touch feedback === */
 .touch-target {

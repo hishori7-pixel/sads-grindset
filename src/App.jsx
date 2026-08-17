@@ -966,25 +966,49 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
 };
 
 // ==========================================
-// MODULE 2: ANALYTICS & STATS (CUSTOM GOAL ENGINE)
+// MODULE 2: ANALYTICS & STATS (MULTI-TIMEFRAME ENGINE)
 // ==========================================
 const Analytics = ({ state, dispatch }) => {
+  const [timeframe, setTimeframe] = useState('7d'); // '7d' | '30d' | '365d' | 'all'
   const todayStr = getTodayStr();
+  
   const todaySessions = state.sessions.filter(s => s.date === todayStr);
   const todaySeconds = todaySessions.reduce((acc, s) => acc + s.duration, 0);
-  
-  const weekStart = addDays(todayStr, -7);
-  const weekSessions = state.sessions.filter(s => s.date >= weekStart && s.date <= todayStr);
-  const weekSeconds = weekSessions.reduce((acc, s) => acc + s.duration, 0);
 
   const targetHours = state.dailyTargetHours || 6.0;
   const targetSeconds = targetHours * 3600;
   const todayProgress = Math.min(100, (todaySeconds / targetSeconds) * 100);
 
-  const subjectTimes = weekSessions.reduce((acc, s) => {
-    acc[s.subject] = (acc[s.subject] || 0) + s.duration;
-    return acc;
-  }, {});
+  const timeframeMeta = {
+    '7d': { title: '7-Day Total', label: 'Weekly', sub: 'weekly sessions', badge: '7D' },
+    '30d': { title: '30-Day Total', label: 'Monthly', sub: 'monthly sessions', badge: '30D' },
+    '365d': { title: 'Yearly Total', label: 'Yearly', sub: 'yearly sessions', badge: '1Y' },
+    'all': { title: 'All-Time Total', label: 'All-Time', sub: 'all-time sessions', badge: 'ALL' }
+  };
+
+  const filteredSessions = useMemo(() => {
+    if (timeframe === 'all') return state.sessions;
+    const days = timeframe === '30d' ? 30 : timeframe === '365d' ? 365 : 7;
+    const startDate = addDays(todayStr, -days);
+    return state.sessions.filter(s => s.date >= startDate && s.date <= todayStr);
+  }, [state.sessions, timeframe, todayStr]);
+
+  const timeframeSeconds = filteredSessions.reduce((acc, s) => acc + s.duration, 0);
+  const timeframeHours = (timeframeSeconds / 3600).toFixed(1);
+
+  const subjectTimes = useMemo(() => {
+    return filteredSessions.reduce((acc, s) => {
+      acc[s.subject] = (acc[s.subject] || 0) + s.duration;
+      return acc;
+    }, {});
+  }, [filteredSessions]);
+
+  const cycleTimeframe = () => {
+    const order = ['7d', '30d', '365d', 'all'];
+    const nextIdx = (order.indexOf(timeframe) + 1) % order.length;
+    setTimeframe(order[nextIdx]);
+    soundEngine.play('click');
+  };
 
   const rankInfo = getRankInfo(state.xp);
 
@@ -993,6 +1017,7 @@ const Analytics = ({ state, dispatch }) => {
       
       {/* 4 Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
+        {/* Card 1: Today */}
         <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
             <span>Today</span>
@@ -1007,20 +1032,38 @@ const Analytics = ({ state, dispatch }) => {
           </div>
         </div>
 
-        <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
+        {/* Card 2: Interactive Timeframe Switcher (7D / 30D / 1Y / ALL) */}
+        <div 
+          onClick={cycleTimeframe}
+          className="bg-zinc-900/40 border border-zinc-800/80 hover:border-cyan-500/50 rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:bg-zinc-900/60 group relative select-none"
+          title="Click to cycle: Weekly (7D) ➔ Monthly (30D) ➔ Yearly (1Y) ➔ All-Time"
+        >
           <div className="flex items-center justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
-            <span>7-Day Total</span>
-            <Calendar className="w-4 h-4 text-cyan-400" />
+            <span className="group-hover:text-cyan-400 transition-colors">{timeframeMeta[timeframe].title}</span>
+            <button 
+              onClick={(e) => { e.stopPropagation(); cycleTimeframe(); }}
+              className="p-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all"
+              title="Toggle timeframe: 7D / Monthly / Yearly / All"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-mono font-bold text-zinc-100">{(weekSeconds / 3600).toFixed(1)}</span>
-            <span className="text-xs text-zinc-500 ml-1">hours</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div>
+              <span className="text-2xl sm:text-3xl font-mono font-bold text-zinc-100">{timeframeHours}</span>
+              <span className="text-xs text-zinc-500 ml-1">hours</span>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-400 border border-cyan-800/60">
+              {timeframeMeta[timeframe].badge}
+            </span>
           </div>
-          <div className="text-[11px] text-cyan-400/80 mt-2 font-medium">
-            {weekSessions.length} weekly sessions
+          <div className="text-[11px] text-cyan-400/80 mt-2 font-medium flex items-center justify-between">
+            <span>{filteredSessions.length} {timeframeMeta[timeframe].sub}</span>
+            <span className="text-[9px] text-zinc-500 group-hover:text-cyan-300 font-mono">↻ Tap to switch</span>
           </div>
         </div>
 
+        {/* Card 3: Streak */}
         <div className="bg-zinc-900/40 border border-amber-500/30 rounded-2xl p-5 flex flex-col justify-between glow-amber">
           <div className="flex items-center justify-between text-amber-500/80 text-xs font-bold uppercase tracking-wider">
             <span>Streak</span>
@@ -1035,7 +1078,7 @@ const Analytics = ({ state, dispatch }) => {
           </div>
         </div>
 
-        {/* 8-Tier Rank Progress */}
+        {/* Card 4: Rank Progress */}
         <div className={`bg-zinc-900/40 border rounded-2xl p-5 flex flex-col justify-between ${rankInfo.badge}`}>
           <div className="flex items-center justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
             <span>{rankInfo.tier}</span>
@@ -1056,7 +1099,7 @@ const Analytics = ({ state, dispatch }) => {
         </div>
       </div>
 
-      {/* Target Ring & Weekly Breakdown */}
+      {/* Target Ring & Multi-Timeframe Subject Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 flex flex-col items-center justify-between space-y-4">
@@ -1090,7 +1133,7 @@ const Analytics = ({ state, dispatch }) => {
 
           <div className="w-full grid grid-cols-2 gap-2 text-center text-xs text-zinc-400 bg-zinc-950/70 p-3 rounded-2xl border border-zinc-800/80">
             <div>
-              <span className="text-zinc-500 block text-[10px] uppercase">Logged</span>
+              <span className="text-zinc-500 block text-[10px] uppercase">Logged Today</span>
               <span className="font-mono text-zinc-200 font-bold">{(todaySeconds / 3600).toFixed(1)} hrs</span>
             </div>
             <div>
@@ -1101,18 +1144,33 @@ const Analytics = ({ state, dispatch }) => {
         </div>
 
         <div className="lg:col-span-7 bg-zinc-900/40 border border-zinc-800/80 rounded-3xl p-6 flex flex-col justify-between">
-          <div className="w-full flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-zinc-300 flex items-center">
-              <BarChart3 className="w-4 h-4 mr-2 text-cyan-400"/> Weekly Subject Breakdown
-            </h3>
-            <span className="text-xs font-mono text-zinc-500">{(weekSeconds / 3600).toFixed(1)}h Total</span>
+          <div className="w-full flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-300 flex items-center">
+                <BarChart3 className="w-4 h-4 mr-2 text-cyan-400"/> {timeframeMeta[timeframe].label} Subject Breakdown
+              </h3>
+              <span className="text-xs font-mono text-zinc-500">{timeframeHours}h Total ({filteredSessions.length} Sessions)</span>
+            </div>
+
+            {/* Quick Timeframe Switcher Tabs */}
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
+              {['7d', '30d', '365d', 'all'].map(tf => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all ${timeframe === tf ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  {timeframeMeta[tf].badge}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="space-y-4 my-auto">
+          <div className="space-y-3.5 my-auto">
             {SUBJECTS.map(sub => {
               const time = subjectTimes[sub] || 0;
-              const perc = weekSeconds > 0 ? (time / weekSeconds) * 100 : 0;
-              const theme = SUBJECT_THEMES[sub];
+              const perc = timeframeSeconds > 0 ? (time / timeframeSeconds) * 100 : 0;
+              const theme = SUBJECT_THEMES[sub] || SUBJECT_THEMES.Math;
               
               return (
                 <div key={sub} className="space-y-1.5">
