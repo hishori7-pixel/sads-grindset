@@ -225,17 +225,29 @@ class CloudSyncManager {
 // ==========================================
 // CONSTANTS & UTILITIES
 // ==========================================
-const TODAY_STR = "2026-08-15";
+// Safe local-timezone dynamic date formatting (never shifts UTC midnight)
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const formatDate = (date) => {
   const d = new Date(date);
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const addDays = (dateStr, days) => {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return formatDate(d);
+  if (!dateStr) dateStr = getTodayStr();
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  return formatDate(date);
 };
 
 const formatTime = (totalSeconds) => {
@@ -368,6 +380,85 @@ const getRankInfo = (xp) => {
 };
 
 // ==========================================
+// LOSSLESS STATE MERGE ENGINE (NEVER LOSES DATA)
+// ==========================================
+const mergeStates = (local, remote) => {
+  if (!remote) return local || getCleanState();
+  if (!local) return remote;
+
+  // 1. Merge sessions: union by id or (date + duration + subject + timestamp)
+  const sessionMap = new Map();
+  (local.sessions || []).forEach(s => {
+    const key = s.id || `${s.date}-${s.timestamp || 0}-${s.subject}-${s.duration}`;
+    sessionMap.set(key, s);
+  });
+  (remote.sessions || []).forEach(s => {
+    const key = s.id || `${s.date}-${s.timestamp || 0}-${s.subject}-${s.duration}`;
+    if (!sessionMap.has(key)) {
+      sessionMap.set(key, s);
+    }
+  });
+  const mergedSessions = Array.from(sessionMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  // 2. Merge topics (Spaced Repetition): preserve highest review count & mastery stage
+  const topicMap = new Map();
+  (local.topics || []).forEach(t => {
+    const key = t.id || `${t.subject}-${t.name}`;
+    topicMap.set(key, t);
+  });
+  (remote.topics || []).forEach(t => {
+    const key = t.id || `${t.subject}-${t.name}`;
+    const existing = topicMap.get(key);
+    if (!existing) {
+      topicMap.set(key, t);
+    } else {
+      const existingStage = existing.stage || 1;
+      const remoteStage = t.stage || 1;
+      if (remoteStage > existingStage || (t.reviews?.length || 0) > (existing.reviews?.length || 0)) {
+        topicMap.set(key, { ...existing, ...t });
+      }
+    }
+  });
+  const mergedTopics = Array.from(topicMap.values());
+
+  // 3. Merge tasks (Hit-List): union by id or text
+  const taskMap = new Map();
+  (local.tasks || []).forEach(t => {
+    const key = t.id || t.text;
+    taskMap.set(key, t);
+  });
+  (remote.tasks || []).forEach(t => {
+    const key = t.id || t.text;
+    const existing = taskMap.get(key);
+    if (!existing) {
+      taskMap.set(key, t);
+    } else {
+      taskMap.set(key, { ...existing, completed: existing.completed || t.completed });
+    }
+  });
+  const mergedTasks = Array.from(taskMap.values());
+
+  // 4. XP & Streak: XP NEVER DECREASES!
+  const calculatedXp = mergedSessions.reduce((acc, s) => acc + Math.max(10, Math.floor((s.duration || 0) / 60) * 10), 0);
+  const highestXp = Math.max(local.xp || 0, remote.xp || 0, calculatedXp);
+  const highestStreak = Math.max(local.streak || 0, remote.streak || 0);
+
+  return {
+    ...local,
+    ...remote,
+    sessions: mergedSessions,
+    topics: mergedTopics,
+    tasks: mergedTasks,
+    xp: highestXp,
+    streak: highestStreak,
+    dailyTargetHours: remote.dailyTargetHours || local.dailyTargetHours || 6.0,
+    syncPin: local.syncPin || remote.syncPin || '',
+    lastStudyDate: remote.lastStudyDate || local.lastStudyDate || null,
+    lastSynced: Math.max(local.lastSynced || 0, remote.lastSynced || 0, Date.now())
+  };
+};
+
+// ==========================================
 // 100% CLEAN INITIAL ZERO STATE
 // ==========================================
 const getCleanState = () => ({
@@ -396,7 +487,8 @@ const getCleanState = () => ({
 const reducer = (state, action) => {
   switch (action.type) {
     case 'SET_STATE':
-      return { ...state, ...action.payload };
+    case 'MERGE_STATE':
+      return mergeStates(state, action.payload);
     case 'SET_TAB':
       return { ...state, activeTab: action.payload };
     case 'SET_DAILY_TARGET':
@@ -447,19 +539,20 @@ const reducer = (state, action) => {
       const duration = state.timerSeconds;
       if (duration === 0) return state;
 
+      const todayStr = getTodayStr();
       soundEngine.play('xp');
       const newSession = {
         id: `sess-${Date.now()}`,
         subject: state.activeSubject,
         topic: state.customTopic.trim() || `${state.activeSubject} Deep Session`,
         duration,
-        date: TODAY_STR,
+        date: todayStr,
         timestamp: Date.now()
       };
 
       let newStreak = state.streak;
-      if (state.lastStudyDate !== TODAY_STR) {
-        if (state.lastStudyDate === addDays(TODAY_STR, -1)) {
+      if (state.lastStudyDate !== todayStr) {
+        if (state.lastStudyDate === addDays(todayStr, -1)) {
           newStreak += 1;
         } else {
           newStreak = 1;
@@ -474,43 +567,46 @@ const reducer = (state, action) => {
         timerSeconds: 0,
         timerRunning: false,
         streak: newStreak,
-        lastStudyDate: TODAY_STR,
-        xp: state.xp + earnedXp
+        lastStudyDate: todayStr,
+        xp: (state.xp || 0) + earnedXp
       };
     }
 
     // Spaced Repetition Actions (7 Stages)
     case 'ADD_TOPIC': {
       soundEngine.play('click');
+      const todayStr = getTodayStr();
       const topic = {
         id: `top-${Date.now()}`,
         subject: action.payload.subject,
         name: action.payload.name,
-        dateAdded: TODAY_STR,
+        dateAdded: todayStr,
         stage: 1,
-        reviews: [TODAY_STR],
-        nextReview: addDays(TODAY_STR, 1),
+        intervals: [1, 3, 7, 14, 30, 60, 90],
+        reviews: [todayStr],
+        nextReview: addDays(todayStr, 1),
         status: 'upcoming'
       };
       return { 
         ...state, 
         topics: [topic, ...state.topics],
-        xp: state.xp + 15 
+        xp: (state.xp || 0) + 15 
       };
     }
     case 'REVIEW_TOPIC': {
       soundEngine.play('xp');
+      const todayStr = getTodayStr();
       const topics = state.topics.map(t => {
         if (t.id === action.payload) {
           const nextStageNum = Math.min(7, (t.stage || 1) + 1);
           const stageConfig = SR_STAGES[nextStageNum - 1] || SR_STAGES[6];
           const isMastered = nextStageNum >= 7;
-          const nextReview = addDays(TODAY_STR, stageConfig.interval);
+          const nextReview = addDays(todayStr, stageConfig.interval);
 
           return {
             ...t,
             stage: nextStageNum,
-            reviews: [...t.reviews, TODAY_STR],
+            reviews: [...(t.reviews || []), todayStr],
             nextReview: isMastered ? null : nextReview,
             status: isMastered ? 'mastered' : 'upcoming'
           };
@@ -520,7 +616,7 @@ const reducer = (state, action) => {
       return { 
         ...state, 
         topics,
-        xp: state.xp + 50 
+        xp: (state.xp || 0) + 50 
       };
     }
     case 'DELETE_TOPIC':
@@ -537,7 +633,7 @@ const reducer = (state, action) => {
             text: action.payload.text, 
             priority: action.payload.priority || 'standard',
             completed: false, 
-            date: TODAY_STR 
+            date: getTodayStr() 
           },
           ...state.tasks
         ]
@@ -599,7 +695,8 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
   const progressPercent = ((state.timerSeconds % 3600) / 3600) * 100;
   const strokeDashoffset = circumference - (circumference * progressPercent) / 100;
 
-  const todaySessions = state.sessions.filter(s => s.date === TODAY_STR);
+  const todayStr = getTodayStr();
+  const todaySessions = state.sessions.filter(s => s.date === todayStr);
   const todaySeconds = todaySessions.reduce((acc, s) => acc + s.duration, 0);
   const targetSeconds = (state.dailyTargetHours || 6.0) * 3600;
   const todayProgress = Math.min(100, (todaySeconds / targetSeconds) * 100);
@@ -872,11 +969,12 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
 // MODULE 2: ANALYTICS & STATS (CUSTOM GOAL ENGINE)
 // ==========================================
 const Analytics = ({ state, dispatch }) => {
-  const todaySessions = state.sessions.filter(s => s.date === TODAY_STR);
+  const todayStr = getTodayStr();
+  const todaySessions = state.sessions.filter(s => s.date === todayStr);
   const todaySeconds = todaySessions.reduce((acc, s) => acc + s.duration, 0);
   
-  const weekStart = addDays(TODAY_STR, -7);
-  const weekSessions = state.sessions.filter(s => s.date >= weekStart);
+  const weekStart = addDays(todayStr, -7);
+  const weekSessions = state.sessions.filter(s => s.date >= weekStart && s.date <= todayStr);
   const weekSeconds = weekSessions.reduce((acc, s) => acc + s.duration, 0);
 
   const targetHours = state.dailyTargetHours || 6.0;
@@ -1111,10 +1209,11 @@ const SurvivalHeatmap = ({ state }) => {
 
   const grid = useMemo(() => {
     const cells = [];
+    const todayStr = getTodayStr();
     
     if (viewMode === 'future') {
       for (let i = 0; i < totalDays; i++) {
-        const dStr = addDays(TODAY_STR, i);
+        const dStr = addDays(todayStr, i);
         const data = dateMap[dStr] || { hours: 0, subjects: {} };
         const scheduledCount = futureSrMap[dStr] || 0;
         const isToday = i === 0;
@@ -1152,7 +1251,7 @@ const SurvivalHeatmap = ({ state }) => {
       }
     } else {
       for (let i = totalDays - 1; i >= 0; i--) {
-        const dStr = addDays(TODAY_STR, -i);
+        const dStr = addDays(todayStr, -i);
         const data = dateMap[dStr] || { hours: 0, subjects: {} };
         const isToday = i === 0;
         
@@ -1408,10 +1507,11 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
   };
 
   const processedTopics = useMemo(() => {
+    const todayStr = getTodayStr();
     return state.topics.map(t => {
       let status = t.status;
       if (status !== 'mastered') {
-        if (t.nextReview && t.nextReview <= TODAY_STR) status = 'due';
+        if (t.nextReview && t.nextReview <= todayStr) status = 'due';
         else status = 'upcoming';
       }
       return { ...t, currentStatus: status };
@@ -1657,7 +1757,8 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
 // MODULE 5: EMERGENCY BUFFER MODE
 // ==========================================
 const EmergencyBuffer = ({ state, dispatch, onReward }) => {
-  const dueTopics = state.topics.filter(t => t.nextReview && t.nextReview <= TODAY_STR && t.status !== 'mastered');
+  const todayStr = getTodayStr();
+  const dueTopics = state.topics.filter(t => t.nextReview && t.nextReview <= todayStr && t.status !== 'mastered');
   const pendingTasks = state.tasks.filter(t => !t.completed);
 
   return (
@@ -2280,20 +2381,27 @@ const ShortcutsModal = ({ isOpen, onClose, onResetAll }) => {
 // ==========================================
 export default function App() {
   const STORAGE_KEY = 'sads-grindset-v3';
+  const BACKUP_STORAGE_KEY = 'sads-grindset-backup';
 
   const [state, dispatch] = useReducer(reducer, null, () => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      const savedPin = localStorage.getItem(SYNC_STORAGE_KEY) || '';
-      if (saved) {
+      let recovered = getCleanState();
+      // Recovery cascading across backup keys
+      const keysToTry = [STORAGE_KEY, BACKUP_STORAGE_KEY, 'sads-grindset-v2', 'sads-grindset-data'];
+      for (const k of keysToTry) {
         try {
-          const parsed = JSON.parse(saved);
-          return { ...getCleanState(), ...parsed, syncPin: savedPin || parsed.syncPin || '' };
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            recovered = mergeStates(recovered, parsed);
+          }
         } catch (e) {
-          console.error("Failed to parse local storage", e);
+          console.warn("Storage recovery err", k, e);
         }
       }
-      if (savedPin) return { ...getCleanState(), syncPin: savedPin };
+      const savedPin = localStorage.getItem(SYNC_STORAGE_KEY) || '';
+      if (savedPin) recovered.syncPin = savedPin;
+      return recovered;
     }
     return getCleanState();
   });
@@ -2312,10 +2420,12 @@ export default function App() {
     }, 2200);
   }, []);
 
-  // Save state to LocalStorage
+  // Save state to LocalStorage with dual backup
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const serialized = JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.setItem(BACKUP_STORAGE_KEY, serialized);
       if (state.syncPin) localStorage.setItem(SYNC_STORAGE_KEY, state.syncPin);
     } catch (e) {
       console.error("LocalStorage write error", e);
@@ -2350,7 +2460,7 @@ export default function App() {
     };
   }, [state.sessions, state.topics, state.tasks, state.xp, state.streak, state.dailyTargetHours, state.syncPin]);
 
-  // Auto Cloud Sync Pull on Window Focus & Mount
+  // Auto Cloud Sync Pull on Window Focus & Mount (Lossless Merge)
   const performCloudPull = useCallback(async () => {
     if (!state.syncPin || isSyncingRef.current) return;
     isSyncingRef.current = true;
@@ -2364,8 +2474,8 @@ export default function App() {
 
     const res = await CloudSyncManager.pullState(state.syncPin, customSb);
     if (res.success && res.data) {
-      // Merge or update state if remote data is newer or has more sessions
-      dispatch({ type: 'SET_STATE', payload: res.data });
+      // Non-destructive merge of remote data with local state
+      dispatch({ type: 'MERGE_STATE', payload: res.data });
       dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
       setSyncStatus('synced');
     } else {
@@ -2383,7 +2493,7 @@ export default function App() {
         dispatch({ type: 'SET_SYNC_PIN', payload: syncParam });
         CloudSyncManager.pullState(syncParam).then(res => {
           if (res.success && res.data) {
-            dispatch({ type: 'SET_STATE', payload: res.data });
+            dispatch({ type: 'MERGE_STATE', payload: res.data });
             dispatch({ type: 'SET_LAST_SYNCED', payload: Date.now() });
             showReward('Device Synced');
           }
@@ -2455,7 +2565,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.activeTab]);
 
-  const dueCount = state.topics.filter(t => t.nextReview && t.nextReview <= TODAY_STR && t.status !== 'mastered').length;
+  const todayStr = getTodayStr();
+  const dueCount = state.topics.filter(t => t.nextReview && t.nextReview <= todayStr && t.status !== 'mastered').length;
 
   const tabs = [
     { id: 'focus', icon: Timer, label: 'Focus Engine' },
