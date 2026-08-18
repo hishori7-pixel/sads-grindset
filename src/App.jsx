@@ -443,14 +443,27 @@ const mergeStates = (local, remote) => {
   const highestXp = Math.max(local.xp || 0, remote.xp || 0, calculatedXp);
   const highestStreak = Math.max(local.streak || 0, remote.streak || 0);
 
+  // Recalculate local timer if it was running (never overwrite local active timer from remote)
+  let timerSecs = local.timerSeconds || 0;
+  if (local.timerRunning && local.timerStartTime) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - local.timerStartTime) / 1000));
+    timerSecs = (local.timerAccumulatedSeconds || 0) + elapsed;
+  }
+
   return {
     ...local,
-    ...remote,
     sessions: mergedSessions,
     topics: mergedTopics,
     tasks: mergedTasks,
     xp: highestXp,
     streak: highestStreak,
+    timerSeconds: timerSecs,
+    timerRunning: local.timerRunning ?? false,
+    timerStartTime: local.timerStartTime ?? null,
+    timerAccumulatedSeconds: local.timerAccumulatedSeconds ?? 0,
+    activeSubject: local.activeSubject || remote.activeSubject || 'Math',
+    customTopic: local.customTopic !== undefined ? local.customTopic : (remote.customTopic || ''),
+    activeTab: local.activeTab || 'focus',
     dailyTargetHours: remote.dailyTargetHours || local.dailyTargetHours || 6.0,
     syncPin: local.syncPin || remote.syncPin || '',
     lastStudyDate: remote.lastStudyDate || local.lastStudyDate || null,
@@ -466,6 +479,8 @@ const getCleanState = () => ({
   emergencyMode: false,
   timerRunning: false,
   timerSeconds: 0,
+  timerStartTime: null,
+  timerAccumulatedSeconds: 0,
   activeSubject: 'Math',
   customTopic: '',
   dailyTargetHours: 6.0, // Customizable Daily Target
@@ -513,21 +528,59 @@ const reducer = (state, action) => {
       return { ...getCleanState(), syncPin: state.syncPin };
     case 'SET_TIMER':
       return { ...state, timerSeconds: action.payload };
-    case 'TOGGLE_TIMER':
+    case 'RECALC_TIMER': {
+      if (!state.timerRunning || !state.timerStartTime) return state;
+      const elapsed = Math.max(0, Math.floor((Date.now() - state.timerStartTime) / 1000));
+      const totalSecs = (state.timerAccumulatedSeconds || 0) + elapsed;
+      if (totalSecs === state.timerSeconds) return state;
+      return { ...state, timerSeconds: totalSecs };
+    }
+    case 'TOGGLE_TIMER': {
       soundEngine.play('click');
-      return { ...state, timerRunning: !state.timerRunning };
-    case 'START_TIMER_FOR_TOPIC':
+      const now = Date.now();
+      if (state.timerRunning) {
+        // Pausing timer: lock accumulated time
+        const elapsed = state.timerStartTime ? Math.max(0, Math.floor((now - state.timerStartTime) / 1000)) : 0;
+        const currentSecs = (state.timerAccumulatedSeconds || 0) + elapsed;
+        return {
+          ...state,
+          timerRunning: false,
+          timerStartTime: null,
+          timerAccumulatedSeconds: currentSecs,
+          timerSeconds: currentSecs
+        };
+      } else {
+        // Starting timer: record epoch start time
+        return {
+          ...state,
+          timerRunning: true,
+          timerStartTime: now,
+          timerAccumulatedSeconds: state.timerSeconds || 0
+        };
+      }
+    }
+    case 'START_TIMER_FOR_TOPIC': {
       soundEngine.play('click');
+      const now = Date.now();
       return {
         ...state,
         activeTab: 'focus',
         activeSubject: action.payload.subject || state.activeSubject,
         customTopic: action.payload.topic || '',
-        timerRunning: true
+        timerRunning: true,
+        timerStartTime: now,
+        timerAccumulatedSeconds: state.timerSeconds || 0
       };
+    }
     case 'RESET_TIMER':
       soundEngine.play('click');
-      return { ...state, timerSeconds: 0, timerRunning: false };
+      return { 
+        ...state, 
+        timerSeconds: 0, 
+        timerRunning: false,
+        timerStartTime: null,
+        timerAccumulatedSeconds: 0
+      };
     case 'SET_SUBJECT':
       soundEngine.play('click');
       return { ...state, activeSubject: action.payload };
@@ -536,7 +589,11 @@ const reducer = (state, action) => {
     
     // Log Focus Session
     case 'LOG_SESSION': {
-      const duration = state.timerSeconds;
+      let duration = state.timerSeconds;
+      if (state.timerRunning && state.timerStartTime) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - state.timerStartTime) / 1000));
+        duration = (state.timerAccumulatedSeconds || 0) + elapsed;
+      }
       if (duration === 0) return state;
 
       const todayStr = getTodayStr();
@@ -566,6 +623,8 @@ const reducer = (state, action) => {
         sessions: [newSession, ...state.sessions],
         timerSeconds: 0,
         timerRunning: false,
+        timerStartTime: null,
+        timerAccumulatedSeconds: 0,
         streak: newStreak,
         lastStudyDate: todayStr,
         xp: (state.xp || 0) + earnedXp
@@ -2460,6 +2519,13 @@ export default function App() {
       }
       const savedPin = localStorage.getItem(SYNC_STORAGE_KEY) || '';
       if (savedPin) recovered.syncPin = savedPin;
+
+      // If timer was running when tab was backgrounded/closed, seamlessly calculate elapsed seconds
+      if (recovered.timerRunning && recovered.timerStartTime) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - recovered.timerStartTime) / 1000));
+        recovered.timerSeconds = (recovered.timerAccumulatedSeconds || 0) + elapsed;
+      }
+
       return recovered;
     }
     return getCleanState();
@@ -2562,31 +2628,57 @@ export default function App() {
     }
   }, [showReward]);
 
+  // Live Background-Safe Timer Hook (Epoch Timestamp Driven)
+  useEffect(() => {
+    if (!state.timerRunning || !state.timerStartTime) return;
+
+    // Immediately recalculate on mount/state change
+    dispatch({ type: 'RECALC_TIMER' });
+
+    const interval = setInterval(() => {
+      dispatch({ type: 'RECALC_TIMER' });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [state.timerRunning, state.timerStartTime]);
+
+  // Instant Recalculation on Visibility / Focus / PageShow (App Switch, Lock Screen, Tab Return)
   useEffect(() => {
     if (state.syncPin) {
       performCloudPull();
     }
-    const handleFocus = () => {
-      if (state.syncPin) performCloudPull();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [state.syncPin, performCloudPull]);
 
-  // Live Timer Count
-  const timerRef = useRef(null);
-  useEffect(() => {
-    if (state.timerRunning) {
-      timerRef.current = setInterval(() => {
-        dispatch({ type: 'SET_TIMER', payload: state.timerSeconds + 1 });
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && state.timerRunning) {
+        dispatch({ type: 'RECALC_TIMER' });
+      }
     };
-  }, [state.timerRunning, state.timerSeconds]);
+
+    const handleWindowFocus = () => {
+      if (state.timerRunning) {
+        dispatch({ type: 'RECALC_TIMER' });
+      }
+      if (state.syncPin) {
+        performCloudPull();
+      }
+    };
+
+    const handlePageShow = () => {
+      if (state.timerRunning) {
+        dispatch({ type: 'RECALC_TIMER' });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [state.timerRunning, state.syncPin, performCloudPull]);
 
   // Global Keyboard Shortcuts (Space, R, N, E, ?)
   useEffect(() => {
