@@ -77,7 +77,9 @@ class SoundEngine {
 
 const soundEngine = new SoundEngine();
 
-// ==========================================
+const APP_TITLE = 'Preppy';
+const APP_SUBTITLE = 'Your 12th-Grade Study Companion • رفيقك لتنظيم دراسة السادس';
+
 // ==========================================
 // CLOUD SYNC ENGINE (6-DIGIT PIN, REST RELAY & SUPABASE)
 // ==========================================
@@ -347,76 +349,73 @@ const SR_STAGES = [
 ];
 
 // ==========================================
-// 22-TIER YEAR-LONG ACADEMIC GRINDSET HIERARCHY
+// 22-LEVEL STUDY PROGRESSION
 // ==========================================
-const GRINDSET_RANKS = [
-  // --- DIVISION 1: THE WAKE-UP (Hours 0 - 40) ---
-  { lvl: 1, minXp: 0, maxXp: 1200, name: 'Procrastination Victim', tier: 'LVL 1', division: 'Division 1: The Wake-Up', color: 'text-zinc-400', badge: 'bg-zinc-800/40 border-zinc-700/50', hours: '0h - 2h', quote: 'The journey of a thousand study hours begins with opening the book.', next: 'Caffeine Dependent' },
-  { lvl: 2, minXp: 1200, maxXp: 3600, name: 'Caffeine Dependent', tier: 'LVL 2', division: 'Division 1: The Wake-Up', color: 'text-zinc-300', badge: 'bg-zinc-700/20 border-zinc-600/40', hours: '2h - 6h', quote: 'More coffee, less excuses. The syllabus is starting to feel real.', next: 'Desk Prisoner' },
-  { lvl: 3, minXp: 3600, maxXp: 7200, name: 'Desk Prisoner', tier: 'LVL 3', division: 'Division 1: The Wake-Up', color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/30', hours: '6h - 12h', quote: 'Chair glued, phone silenced. The first true study momentum kicks in.', next: 'Syllabus Survivor' },
-  { lvl: 4, minXp: 7200, maxXp: 14400, name: 'Syllabus Survivor', tier: 'LVL 4', division: 'Division 1: The Wake-Up', color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/30 glow-emerald', hours: '12h - 24h', quote: 'Chapters are falling one by one. You survived the initial dread.', next: 'Night Shift Soldier' },
-  { lvl: 5, minXp: 14400, maxXp: 24000, name: 'Night Shift Soldier', tier: 'LVL 5', division: 'Division 1: The Wake-Up', color: 'text-cyan-400', badge: 'bg-cyan-500/10 border-cyan-500/30', hours: '24h - 40h', quote: 'When everyone is asleep, you are still drilling problem sets.', next: 'Library Regular' },
-
-  // --- DIVISION 2: THE TRAINING ARC (Hours 40 - 215) ---
-  { lvl: 6, minXp: 24000, maxXp: 39000, name: 'Library Regular', tier: 'LVL 6', division: 'Division 2: The Training Arc', color: 'text-cyan-400', badge: 'bg-cyan-500/10 border-cyan-500/30 glow-cyan', hours: '40h - 65h', quote: 'Studying is no longer a chore, it has become your natural habitat.', next: 'Lock-In Season' },
-  { lvl: 7, minXp: 39000, maxXp: 60000, name: 'Lock-In Season', tier: 'LVL 7', division: 'Division 2: The Training Arc', color: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/30 glow-teal', hours: '65h - 100h', quote: 'Distractions eliminated. Social noise muted. Pure locked-in tunnel vision.', next: 'Silent Grinder' },
-  { lvl: 8, minXp: 60000, maxXp: 90000, name: 'Silent Grinder', tier: 'LVL 8', division: 'Division 2: The Training Arc', color: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/30', hours: '100h - 150h', quote: 'No talk, zero bragging. 100+ hours of raw, quiet output.', next: 'Past Paper Demon' },
-  { lvl: 9, minXp: 90000, maxXp: 130000, name: 'Past Paper Demon', tier: 'LVL 9', division: 'Division 2: The Training Arc', color: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/30 glow-blue', hours: '150h - 215h', quote: 'You spot exam trick questions instantly. Examiners cannot surprise you.', next: 'Curriculum Breaker' },
-
-  // --- DIVISION 3: DEMON MODE (Hours 215 - 675) ---
-  { lvl: 10, minXp: 130000, maxXp: 180000, name: 'Curriculum Breaker', tier: 'LVL 10', division: 'Division 3: Demon Mode', color: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/30', hours: '215h - 300h', quote: 'You finished the entire curriculum before the teacher finished Chapter 4.', next: 'Exam Room Menace' },
-  { lvl: 11, minXp: 180000, maxXp: 240000, name: 'Exam Room Menace', tier: 'LVL 11', division: 'Division 3: Demon Mode', color: 'text-indigo-400', badge: 'bg-indigo-500/10 border-indigo-500/30', hours: '300h - 400h', quote: 'Entering mock exams with ruthless confidence and zero hesitation.', next: 'Sub-Human Sleep Schedule' },
-  { lvl: 12, minXp: 240000, maxXp: 315000, name: 'Sub-Human Sleep Schedule', tier: 'LVL 12', division: 'Division 3: Demon Mode', color: 'text-indigo-400', badge: 'bg-indigo-500/10 border-indigo-500/30', hours: '400h - 525h', quote: 'Over 500 hours logged. Your discipline is completely unbreakable.', next: 'Tunnel Vision Monk' },
-  { lvl: 13, minXp: 315000, maxXp: 405000, name: 'Tunnel Vision Monk', tier: 'LVL 13', division: 'Division 3: Demon Mode', color: 'text-violet-400', badge: 'bg-violet-500/10 border-violet-500/30 glow-violet', hours: '525h - 675h', quote: 'Pure ascetic focus. Every single waking hour is weaponized for grades.', next: 'Formula Automaton' },
-
-  // --- DIVISION 4: THE ASCENDED (Hours 675 - 1550) ---
-  { lvl: 14, minXp: 405000, maxXp: 510000, name: 'Formula Automaton', tier: 'LVL 14', division: 'Division 4: The Ascended', color: 'text-violet-400', badge: 'bg-violet-500/10 border-violet-500/30', hours: '675h - 850h', quote: 'Complex science and math equations feel like second nature.', next: 'Academic Weapon' },
-  { lvl: 15, minXp: 510000, maxXp: 630000, name: 'Academic Weapon', tier: 'LVL 15', division: 'Division 4: The Ascended', color: 'text-purple-400', badge: 'bg-purple-500/10 border-purple-500/30 glow-violet', hours: '850h - 1,050h', quote: 'Fast, lethal, and flawless on every single past paper exam.', next: 'Relentless Machine' },
-  { lvl: 16, minXp: 630000, maxXp: 770000, name: 'Relentless Machine', tier: 'LVL 16', division: 'Division 4: The Ascended', color: 'text-fuchsia-400', badge: 'bg-fuchsia-500/10 border-fuchsia-500/30', hours: '1,050h - 1,280h', quote: 'Over 1,000 real hours clocked. You do not burn out, you adapt.', next: 'Zero Distractions' },
-  { lvl: 17, minXp: 770000, maxXp: 930000, name: 'Zero Distractions', tier: 'LVL 17', division: 'Division 4: The Ascended', color: 'text-pink-400', badge: 'bg-pink-500/10 border-pink-500/30', hours: '1,280h - 1,550h', quote: 'No doom-scrolling, no time wasted. A machine of pure academic productivity.', next: 'Top 1% Scholar' },
-
-  // --- DIVISION 5: FINAL BOSS (Hours 1550 - 3000+) ---
-  { lvl: 18, minXp: 930000, maxXp: 1110000, name: 'Top 1% Scholar', tier: 'LVL 18', division: 'Division 5: Final Boss', color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/30 glow-amber', hours: '1,550h - 1,850h', quote: 'Standing at the top of the nation. Only elite grinders reach this altitude.', next: 'Grade 100 Reaper' },
-  { lvl: 19, minXp: 1110000, maxXp: 1320000, name: 'Grade 100 Reaper', tier: 'LVL 19', division: 'Division 5: Final Boss', color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/30 glow-amber', hours: '1,850h - 2,200h', quote: '100% on every single test. Every last mark is hunted and secured.', next: 'Unstoppable Force' },
-  { lvl: 20, minXp: 1320000, maxXp: 1560000, name: 'Unstoppable Force', tier: 'LVL 20', division: 'Division 5: Final Boss', color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/30 glow-rose', hours: '2,200h - 2,600h', quote: 'Nothing in this academic year can derail your destiny.', next: 'God of Focus' },
-  { lvl: 21, minXp: 1560000, maxXp: 1850000, name: 'God of Focus', tier: 'LVL 21', division: 'Division 5: Final Boss', color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/30 glow-rose', hours: '2,600h - 3,080h', quote: 'You have conquered the year. A living legend of the grind.', next: 'Sads 100 — Transcended Deity' },
-  { lvl: 22, minXp: 1850000, maxXp: 1850000, name: 'Sads 100 — Transcended Deity', tier: 'LVL 22 MAX', division: 'Division 5: Final Boss MAX', color: 'text-rose-400', badge: 'bg-rose-500/20 border-rose-500/50 glow-rose', hours: '3,080h+ MAX', quote: 'Maximum Rank Achieved. 100/100 Secured. Absolute Academic Legend.', next: 'MAX TIER' }
+const LEVEL_THRESHOLDS = [
+  { lvl: 1, minXp: 0, maxXp: 1200, tier: 'Level 1', color: 'text-zinc-400', badge: 'bg-zinc-800/40 border-zinc-700/50', hours: '0h – 2h' },
+  { lvl: 2, minXp: 1200, maxXp: 3600, tier: 'Level 2', color: 'text-zinc-300', badge: 'bg-zinc-700/20 border-zinc-600/40', hours: '2h – 6h' },
+  { lvl: 3, minXp: 3600, maxXp: 7200, tier: 'Level 3', color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/30', hours: '6h – 12h' },
+  { lvl: 4, minXp: 7200, maxXp: 14400, tier: 'Level 4', color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/30 glow-emerald', hours: '12h – 24h' },
+  { lvl: 5, minXp: 14400, maxXp: 24000, tier: 'Level 5', color: 'text-cyan-400', badge: 'bg-cyan-500/10 border-cyan-500/30', hours: '24h – 40h' },
+  { lvl: 6, minXp: 24000, maxXp: 39000, tier: 'Level 6', color: 'text-cyan-400', badge: 'bg-cyan-500/10 border-cyan-500/30 glow-cyan', hours: '40h – 65h' },
+  { lvl: 7, minXp: 39000, maxXp: 60000, tier: 'Level 7', color: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/30 glow-teal', hours: '65h – 100h' },
+  { lvl: 8, minXp: 60000, maxXp: 90000, tier: 'Level 8', color: 'text-teal-400', badge: 'bg-teal-500/10 border-teal-500/30', hours: '100h – 150h' },
+  { lvl: 9, minXp: 90000, maxXp: 130000, tier: 'Level 9', color: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/30 glow-blue', hours: '150h – 215h' },
+  { lvl: 10, minXp: 130000, maxXp: 180000, tier: 'Level 10', color: 'text-blue-400', badge: 'bg-blue-500/10 border-blue-500/30', hours: '215h – 300h' },
+  { lvl: 11, minXp: 180000, maxXp: 240000, tier: 'Level 11', color: 'text-indigo-400', badge: 'bg-indigo-500/10 border-indigo-500/30', hours: '300h – 400h' },
+  { lvl: 12, minXp: 240000, maxXp: 315000, tier: 'Level 12', color: 'text-indigo-400', badge: 'bg-indigo-500/10 border-indigo-500/30', hours: '400h – 525h' },
+  { lvl: 13, minXp: 315000, maxXp: 405000, tier: 'Level 13', color: 'text-violet-400', badge: 'bg-violet-500/10 border-violet-500/30 glow-violet', hours: '525h – 675h' },
+  { lvl: 14, minXp: 405000, maxXp: 510000, tier: 'Level 14', color: 'text-violet-400', badge: 'bg-violet-500/10 border-violet-500/30', hours: '675h – 850h' },
+  { lvl: 15, minXp: 510000, maxXp: 630000, tier: 'Level 15', color: 'text-purple-400', badge: 'bg-purple-500/10 border-purple-500/30 glow-violet', hours: '850h – 1,050h' },
+  { lvl: 16, minXp: 630000, maxXp: 770000, tier: 'Level 16', color: 'text-fuchsia-400', badge: 'bg-fuchsia-500/10 border-fuchsia-500/30', hours: '1,050h – 1,280h' },
+  { lvl: 17, minXp: 770000, maxXp: 930000, tier: 'Level 17', color: 'text-pink-400', badge: 'bg-pink-500/10 border-pink-500/30', hours: '1,280h – 1,550h' },
+  { lvl: 18, minXp: 930000, maxXp: 1110000, tier: 'Level 18', color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/30 glow-amber', hours: '1,550h – 1,850h' },
+  { lvl: 19, minXp: 1110000, maxXp: 1320000, tier: 'Level 19', color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/30 glow-amber', hours: '1,850h – 2,200h' },
+  { lvl: 20, minXp: 1320000, maxXp: 1560000, tier: 'Level 20', color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/30 glow-rose', hours: '2,200h – 2,600h' },
+  { lvl: 21, minXp: 1560000, maxXp: 1850000, tier: 'Level 21', color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/30 glow-rose', hours: '2,600h – 3,080h' },
+  { lvl: 22, minXp: 1850000, maxXp: 1850000, tier: 'Level 22 MAX', color: 'text-rose-400', badge: 'bg-rose-500/20 border-rose-500/50 glow-rose', hours: '3,080h+' }
 ];
+
+// Backward compat alias
+const GRINDSET_RANKS = LEVEL_THRESHOLDS;
 
 const getRankInfo = (xp) => {
   xp = xp || 0;
-  for (let i = 0; i < GRINDSET_RANKS.length; i++) {
-    const r = GRINDSET_RANKS[i];
-    const isMax = i === GRINDSET_RANKS.length - 1;
+  for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+    const r = LEVEL_THRESHOLDS[i];
+    const isMax = i === LEVEL_THRESHOLDS.length - 1;
     if (isMax || xp < r.maxXp) {
       const range = r.maxXp - r.minXp;
       const progress = range > 0 ? Math.min(100, Math.max(0, Math.round(((xp - r.minXp) / range) * 100))) : 100;
-      const nextRank = isMax ? null : GRINDSET_RANKS[i + 1];
+      const nextRank = isMax ? null : LEVEL_THRESHOLDS[i + 1];
       const xpToNext = isMax ? 0 : Math.max(0, r.maxXp - xp);
       const hoursToNext = (xpToNext / 600).toFixed(1);
+      const label = `Level ${r.lvl} • ${xp.toLocaleString()} XP`;
       return {
         ...r,
         progress,
-        current: r.name,
-        nextRankName: nextRank ? nextRank.name : 'MAX TIER',
+        current: label,
+        name: r.tier,
+        nextRankName: nextRank ? nextRank.tier : 'MAX',
         nextRankTier: nextRank ? nextRank.tier : 'MAX',
         xpToNext,
         hoursToNext,
-        next: nextRank ? nextRank.name : 'MAX TIER',
-        allRanks: GRINDSET_RANKS
+        next: nextRank ? nextRank.tier : 'MAX',
+        allRanks: LEVEL_THRESHOLDS
       };
     }
   }
   return {
-    ...GRINDSET_RANKS[0],
+    ...LEVEL_THRESHOLDS[0],
     progress: 0,
-    current: GRINDSET_RANKS[0].name,
-    nextRankName: GRINDSET_RANKS[1].name,
-    nextRankTier: GRINDSET_RANKS[1].tier,
-    xpToNext: GRINDSET_RANKS[0].maxXp,
-    hoursToNext: (GRINDSET_RANKS[0].maxXp / 600).toFixed(1),
-    next: GRINDSET_RANKS[1].name,
-    allRanks: GRINDSET_RANKS
+    current: `Level 1 • 0 XP`,
+    name: LEVEL_THRESHOLDS[0].tier,
+    nextRankName: LEVEL_THRESHOLDS[1].tier,
+    nextRankTier: LEVEL_THRESHOLDS[1].tier,
+    xpToNext: LEVEL_THRESHOLDS[0].maxXp,
+    hoursToNext: (LEVEL_THRESHOLDS[0].maxXp / 600).toFixed(1),
+    next: LEVEL_THRESHOLDS[1].tier,
+    allRanks: LEVEL_THRESHOLDS
   };
 };
 
@@ -1017,7 +1016,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
                 <ListChecks className="w-4 h-4 text-violet-400" />
-                Quick Priority Hit-List ({pendingTasks.length})
+                Today's Goals ({pendingTasks.length})
               </h3>
               <button 
                 onClick={() => dispatch({ type: 'SET_TAB', payload: 'hitlist' })}
@@ -1044,7 +1043,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
                   </div>
                   <button 
                     onClick={() => dispatch({ type: 'START_TIMER_FOR_TOPIC', payload: { topic: t.text } })}
-                    title="Focus on this task now"
+                    title="Focus on this goal now"
                     className="p-1.5 rounded-lg bg-zinc-900 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 transition-colors"
                   >
                     <Play className="w-3 h-3 fill-current" />
@@ -1053,7 +1052,7 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
               ))}
               {pendingTasks.length === 0 && (
                 <div className="p-4 text-center text-zinc-600 text-xs">
-                  All priority tasks clear!
+                  All daily goals completed!
                 </div>
               )}
             </div>
@@ -1179,22 +1178,22 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
           </div>
         </div>
 
-        {/* Card 4: Rank Progress (Clickable to open roadmap) */}
+        {/* Card 4: Level Progress (Minimalist Numerical Display) */}
         <div 
           onClick={onOpenRanks}
           className={`bg-zinc-900/40 border rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:bg-zinc-900/70 hover:scale-[1.02] hover:border-violet-500/50 group select-none ${rankInfo.badge}`}
-          title="Click to view full 22-tier academic grindset roadmap"
+          title="Click to view level milestones"
         >
           <div className="flex items-center justify-between text-zinc-500 text-xs font-bold uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              {rankInfo.tier}
+              <Award className="w-3.5 h-3.5 text-emerald-400" />
+              Study Level
             </span>
-            <span className="text-[10px] text-zinc-500 group-hover:text-violet-400 font-mono">All Ranks ➔</span>
+            <span className="text-[10px] text-zinc-500 group-hover:text-violet-400 font-mono">Levels ➔</span>
           </div>
           <div className="mt-3">
-            <span className={`text-lg sm:text-xl font-mono font-bold ${rankInfo.color} truncate block`}>{rankInfo.current}</span>
-            <div className="text-xs text-zinc-400 font-mono mt-0.5">{state.xp.toLocaleString()} XP • ~{(state.xp / 600).toFixed(1)}h</div>
+            <span className={`text-base sm:text-lg font-mono font-bold ${rankInfo.color} truncate block`}>{rankInfo.current}</span>
+            <div className="text-xs text-zinc-400 font-mono mt-0.5">~{(state.xp / 600).toFixed(1)}h total study time</div>
           </div>
           <div className="mt-2">
             <div className="h-1.5 bg-zinc-950 rounded-full overflow-hidden">
@@ -1202,7 +1201,9 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
             </div>
             <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1 font-mono">
               <span>{rankInfo.progress}% to {rankInfo.nextRankTier}</span>
-              <span className="truncate max-w-[110px] text-zinc-500">{rankInfo.nextRankName}</span>
+              {rankInfo.xpToNext > 0 && (
+                <span className="text-zinc-500">~{rankInfo.hoursToNext}h left</span>
+              )}
             </div>
           </div>
         </div>
@@ -1694,8 +1695,8 @@ const SpacedRepetition = ({ state, dispatch, onReward }) => {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
           dispatch({ type: 'TOGGLE_NOTIFICATIONS' });
-          new Notification("Sads Grindset", {
-            body: "Spaced repetition notifications activated! We'll alert you when reviews are due.",
+          new Notification(APP_TITLE, {
+            body: "Spaced recall notifications activated! We'll alert you when reviews are due.",
             icon: "/favicon.svg"
           });
         }
@@ -2062,9 +2063,9 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
         <div>
           <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
             <ListChecks className="w-6 h-6 text-violet-400" />
-            Today's Priority Hit-List
+            Today's Goals
           </h1>
-          <p className="text-xs text-zinc-500 mt-1">Execute daily targets with zero excuses. Strike through to earn XP.</p>
+          <p className="text-xs text-zinc-500 mt-1">Track your daily study targets and check off completed work.</p>
         </div>
 
         <div className="flex items-center gap-2 font-mono text-xs">
@@ -2083,7 +2084,7 @@ const HitList = ({ state, dispatch, onReward, taskInputRef }) => {
           <input 
             ref={taskInputRef}
             type="text" 
-            placeholder="Add priority task (Press 'N' to quick focus)..." 
+            placeholder="Add a new goal or chapter... (Press 'N' to focus)" 
             value={taskInput}
             onChange={e => setTaskInput(e.target.value)}
             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500/60 transition-all"
@@ -2490,7 +2491,7 @@ const ShortcutsModal = ({ isOpen, onClose, onResetAll }) => {
             <kbd className="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded font-mono text-zinc-200 font-bold">R</kbd>
           </div>
           <div className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800">
-            <span className="text-zinc-300">Focus "Add Priority Task" Input</span>
+            <span className="text-zinc-300">Focus "Add Goal" Input</span>
             <kbd className="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded font-mono text-violet-400 font-bold">N</kbd>
           </div>
           <div className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800">
@@ -2544,7 +2545,7 @@ const ShortcutsModal = ({ isOpen, onClose, onResetAll }) => {
 };
 
 // ==========================================
-// 22-TIER GRINDSET LEVELING ROADMAP MODAL
+// STUDY LEVEL PROGRESSION MODAL (MINIMALIST)
 // ==========================================
 const RankRoadmapModal = ({ isOpen, onClose, xp }) => {
   const rankInfo = getRankInfo(xp);
@@ -2552,111 +2553,82 @@ const RankRoadmapModal = ({ isOpen, onClose, xp }) => {
 
   if (!isOpen) return null;
 
-  const divisions = [
-    { name: 'Division 1: The Wake-Up', subtitle: 'Hours 0 – 40 • Building The Habit', color: 'text-emerald-400', icon: Sparkles, ranks: GRINDSET_RANKS.slice(0, 5) },
-    { name: 'Division 2: The Training Arc', subtitle: 'Hours 40 – 215 • Serious Momentum', color: 'text-cyan-400', icon: Flame, ranks: GRINDSET_RANKS.slice(5, 9) },
-    { name: 'Division 3: Demon Mode', subtitle: 'Hours 215 – 675 • Exam Hall Dominance', color: 'text-violet-400', icon: Zap, ranks: GRINDSET_RANKS.slice(9, 13) },
-    { name: 'Division 4: The Ascended', subtitle: 'Hours 675 – 1,550 • National Top 1%', color: 'text-fuchsia-400', icon: Award, ranks: GRINDSET_RANKS.slice(13, 17) },
-    { name: 'Division 5: Final Boss', subtitle: 'Hours 1,550 – 3,000+ • Living Legends', color: 'text-rose-400', icon: Trophy, ranks: GRINDSET_RANKS.slice(17, 22) }
-  ];
-
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fade-in" onClick={onClose}>
       <div 
-        className="w-full max-w-2xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col space-y-4 animate-scale-in overflow-hidden"
+        className="w-full max-w-xl max-h-[88vh] bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col space-y-4 animate-scale-in overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
           <div className="flex items-center gap-2 text-zinc-100 font-bold text-sm sm:text-base">
-            <Trophy className="w-5 h-5 text-amber-400 glow-amber" />
-            <span>Academic Grindset Mastery Roadmap (22 Tiers)</span>
+            <Award className="w-5 h-5 text-emerald-400" />
+            <span>Study Level Milestones</span>
           </div>
           <button onClick={onClose} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-xl">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Current Standing Hero Banner */}
+        {/* Current Standing Summary */}
         <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 ${rankInfo.badge}`}>
-          <div className="space-y-1 text-center sm:text-left min-w-0">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-950/80 text-zinc-300 border border-zinc-800">
-                {rankInfo.tier}
-              </span>
-              <span className="text-xs font-mono text-zinc-400">{rankInfo.division}</span>
+          <div className="space-y-1.5 text-center sm:text-left min-w-0 flex-1">
+            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">Current Progress</span>
+            <h3 className={`text-lg sm:text-xl font-bold font-mono ${rankInfo.color} truncate`}>{rankInfo.current}</h3>
+            <div className="w-full max-w-xs h-1.5 bg-zinc-950 rounded-full overflow-hidden mx-auto sm:mx-0">
+              <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${rankInfo.progress}%` }}></div>
             </div>
-            <h3 className={`text-xl sm:text-2xl font-black font-mono ${rankInfo.color} truncate`}>{rankInfo.current}</h3>
-            <p className="text-xs text-zinc-400 italic max-w-md">"{rankInfo.quote}"</p>
+            <p className="text-[11px] font-mono text-zinc-400">
+              {rankInfo.progress}% to {rankInfo.nextRankTier} {rankInfo.xpToNext > 0 ? `(${rankInfo.xpToNext.toLocaleString()} XP • ~${rankInfo.hoursToNext}h remaining)` : ''}
+            </p>
           </div>
 
-          <div className="bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-800 text-center sm:text-right shrink-0 min-w-[140px]">
-            <span className="text-[10px] text-zinc-500 uppercase font-mono block">Your Academic XP</span>
-            <span className="text-lg font-mono font-bold text-emerald-400">{(xp || 0).toLocaleString()} XP</span>
-            <span className="text-xs font-mono text-zinc-400 block mt-0.5">~{totalHours}h Focused</span>
+          <div className="bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-800 text-center sm:text-right shrink-0 min-w-[130px]">
+            <span className="text-[10px] text-zinc-500 uppercase font-mono block">Study Time</span>
+            <span className="text-lg font-mono font-bold text-emerald-400">~{totalHours}h</span>
+            <span className="text-[11px] font-mono text-zinc-400 block mt-0.5">{(xp || 0).toLocaleString()} XP</span>
           </div>
         </div>
 
-        {/* Scrollable Divisions & Levels Roadmap */}
-        <div className="flex-1 overflow-y-auto space-y-5 pr-1 py-1">
-          {divisions.map((div, dIdx) => (
-            <div key={dIdx} className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider pb-1 border-b border-zinc-800/60">
-                <span className={`flex items-center gap-1.5 ${div.color}`}>
-                  <div.icon className="w-3.5 h-3.5" />
-                  {div.name}
-                </span>
-                <span className="font-mono text-zinc-500 text-[10px]">{div.subtitle}</span>
+        {/* Scrollable Levels List */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1 py-1">
+          {LEVEL_THRESHOLDS.map(r => {
+            const isCurrent = rankInfo.lvl === r.lvl;
+            const isPast = (xp || 0) >= r.maxXp && r.lvl < 22;
+
+            return (
+              <div 
+                key={r.lvl}
+                className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${isCurrent ? 'bg-zinc-900 border-emerald-500/60 ring-1 ring-emerald-500/30' : isPast ? 'bg-zinc-950/60 border-zinc-800/60' : 'bg-zinc-950/30 border-zinc-900 opacity-60'}`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-mono text-xs font-bold shrink-0 ${isCurrent ? 'bg-emerald-500 text-zinc-950 font-black' : isPast ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-zinc-900 text-zinc-600'}`}>
+                    {isPast ? <Check className="w-3.5 h-3.5" /> : r.lvl}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className={`text-xs sm:text-sm font-mono font-bold ${isCurrent ? r.color : isPast ? 'text-zinc-200' : 'text-zinc-500'}`}>
+                      Level {r.lvl}
+                    </h4>
+                    {isCurrent && (
+                      <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0 flex items-center gap-3 font-mono">
+                  <span className="text-xs text-zinc-400">{r.hours}</span>
+                  <span className="text-xs text-zinc-300 font-semibold min-w-[85px]">{r.minXp.toLocaleString()} XP</span>
+                </div>
               </div>
-
-              <div className="grid grid-cols-1 gap-2">
-                {div.ranks.map(r => {
-                  const isCurrent = rankInfo.lvl === r.lvl;
-                  const isUnlocked = (xp || 0) >= r.minXp;
-                  const isPast = (xp || 0) >= r.maxXp && r.lvl < 22;
-
-                  return (
-                    <div 
-                      key={r.lvl}
-                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${isCurrent ? 'bg-zinc-900 border-emerald-500/70 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/40' : isPast ? 'bg-zinc-950/60 border-zinc-800/60' : 'bg-zinc-950/30 border-zinc-900 opacity-60'}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-mono text-xs font-bold shrink-0 ${isCurrent ? 'bg-emerald-500 text-zinc-950 font-black shadow-md' : isPast ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-zinc-900 text-zinc-600'}`}>
-                          {isPast ? <Check className="w-4 h-4" /> : isCurrent ? <Zap className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-mono text-zinc-500 font-bold">{r.tier}</span>
-                            <h4 className={`text-xs sm:text-sm font-bold truncate ${isCurrent ? r.color : isPast ? 'text-zinc-200' : 'text-zinc-500'}`}>
-                              {r.name}
-                            </h4>
-                            {isCurrent && (
-                              <span className="text-[9px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                                Active Rank
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-1 italic">
-                            "{r.quote}"
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="font-mono text-xs text-zinc-300 font-bold block">{r.hours}</span>
-                        <span className="text-[10px] font-mono text-zinc-500">{r.minXp.toLocaleString()} XP</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer */}
         <div className="pt-3 border-t border-zinc-800 text-center text-xs text-zinc-500 shrink-0">
-          <span>Earn <strong>10 XP per minute</strong> (600 XP/hr) of focused stopwatch study. Advance through all 22 tiers to conquer the academic year!</span>
+          <span>Earn <strong>10 XP per minute</strong> (600 XP/hr) of focused study time.</span>
         </div>
 
       </div>
@@ -2892,11 +2864,11 @@ export default function App() {
   const dueCount = state.topics.filter(t => t.nextReview && t.nextReview <= todayStr && t.status !== 'mastered').length;
 
   const tabs = [
-    { id: 'focus', icon: Timer, label: 'Focus Engine' },
+    { id: 'focus', icon: Timer, label: 'Focus Timer' },
     { id: 'stats', icon: BarChart3, label: 'Analytics' },
-    { id: 'heatmap', icon: Grid3x3, label: 'Heatmap' },
-    { id: 'spaced', icon: Brain, label: 'Spaced Rep', badge: dueCount > 0 ? dueCount : null },
-    { id: 'hitlist', icon: ListChecks, label: 'Hit-List' }
+    { id: 'heatmap', icon: Grid3x3, label: 'Study Heatmap' },
+    { id: 'spaced', icon: Brain, label: 'Spaced Recall', badge: dueCount > 0 ? dueCount : null },
+    { id: 'hitlist', icon: ListChecks, label: "Today's Goals" }
   ];
 
   const isEmergency = state.emergencyMode;
@@ -2926,7 +2898,7 @@ export default function App() {
         onForceSync={performCloudPull}
       />
 
-      {/* 22-Tier Academic Grindset Roadmap Modal */}
+      {/* Study Level Milestones Modal */}
       <RankRoadmapModal 
         isOpen={rankModalOpen} 
         onClose={() => setRankModalOpen(false)} 
@@ -2947,9 +2919,14 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-64 border-r border-zinc-800/60 bg-[#0a0a0f] p-5 pt-6 justify-between shrink-0 h-screen sticky top-0">
         <div>
           {/* Brand */}
-          <div className="font-extrabold tracking-widest text-base mb-8 flex items-center text-zinc-100">
-            <Zap className="w-5 h-5 mr-2.5 text-emerald-400 glow-emerald" />
-            <span>SADS GRINDSET</span>
+          <div className="mb-7">
+            <div className="font-extrabold tracking-wide text-lg flex items-center text-zinc-100">
+              <Zap className="w-5 h-5 mr-2 text-emerald-400 glow-emerald shrink-0" />
+              <span>{APP_TITLE}</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1 leading-snug font-medium">
+              {APP_SUBTITLE}
+            </p>
           </div>
 
           {/* Nav Items */}
@@ -2979,7 +2956,7 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Sidebar Footer: Streak + XP + Rank Progression */}
+        {/* Sidebar Footer: Streak + Level Progression */}
         <div className="pt-4 border-t border-zinc-800/60 space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="text-zinc-500 font-mono">Daily Streak</span>
@@ -2989,15 +2966,14 @@ export default function App() {
             </span>
           </div>
 
-          {/* Rank Progression Bar (Clickable to open roadmap modal) */}
+          {/* Level Progression Bar (Clickable to open milestones modal) */}
           <div 
             onClick={() => setRankModalOpen(true)}
             className="space-y-1.5 bg-zinc-950/80 hover:bg-zinc-900 p-3 rounded-2xl border border-zinc-800/80 hover:border-violet-500/50 cursor-pointer transition-all group select-none"
-            title="Click to view full 22-tier academic grindset roadmap"
+            title="Click to view study level milestones"
           >
             <div className="flex items-center justify-between text-[11px]">
-              <span className={`font-bold ${rankInfo.color} truncate max-w-[120px]`}>{rankInfo.current}</span>
-              <span className="font-mono text-zinc-400 font-semibold">{state.xp.toLocaleString()} XP</span>
+              <span className={`font-mono font-bold ${rankInfo.color} truncate`}>{rankInfo.current}</span>
             </div>
             <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
               <div 
@@ -3006,7 +2982,7 @@ export default function App() {
               ></div>
             </div>
             <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-              <span>{rankInfo.tier}</span>
+              <span>~{(state.xp / 600).toFixed(1)}h studied</span>
               <span className="group-hover:text-violet-400">{rankInfo.progress}% to {rankInfo.nextRankTier}</span>
             </div>
           </div>
@@ -3017,21 +2993,29 @@ export default function App() {
       <div className="flex-1 flex flex-col min-h-screen">
         
         {/* Precision Centered Top Header Bar */}
-        <header className="w-full border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 min-h-[56px]">
+        <header className="w-full border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 min-h-[56px] gap-2">
           
           {/* Left Title / Branding */}
-          <div className="flex items-center gap-2 font-bold tracking-wider text-xs sm:text-sm text-zinc-100">
-            <span className="md:hidden flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-emerald-400" />
-              SADS GRINDSET
-            </span>
-            <span className="hidden md:inline text-zinc-400 font-mono text-xs uppercase">
-              {isEmergency ? 'EMERGENCY TRIAGE' : tabs.find(t => t.id === state.activeTab)?.label}
+          <div className="flex flex-col justify-center min-w-0">
+            <div className="flex items-center gap-2 font-bold tracking-wide text-xs sm:text-sm text-zinc-100">
+              <span className="md:hidden flex items-center gap-1.5 font-extrabold">
+                <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
+                {APP_TITLE}
+              </span>
+              <span className="hidden md:inline text-zinc-200 font-semibold text-xs">
+                {isEmergency ? 'Emergency Review' : tabs.find(t => t.id === state.activeTab)?.label}
+              </span>
+              <span className="hidden lg:inline text-zinc-500 text-xs font-normal truncate">
+                • {APP_SUBTITLE}
+              </span>
+            </div>
+            <span className="md:hidden text-[10px] text-zinc-400 truncate">
+              {APP_SUBTITLE}
             </span>
           </div>
 
           {/* Right Action Icons - Vertically Centered with consistent h-9 heights */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             
             {/* Cloud Sync Button */}
             <button 
@@ -3056,7 +3040,7 @@ export default function App() {
             {/* Audio FX Mute/Unmute */}
             <button 
               onClick={() => dispatch({ type: 'TOGGLE_AUDIO' })}
-              title={state.audioEnabled ? "Cyberpunk Sound FX: ON" : "Cyberpunk Sound FX: Muted"}
+              title={state.audioEnabled ? "Sound FX: ON" : "Sound FX: Muted"}
               className={`h-9 w-9 rounded-xl border transition-colors flex items-center justify-center ${state.audioEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-300'}`}
             >
               {state.audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -3109,7 +3093,7 @@ export default function App() {
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] mt-0.5 tracking-tight">{tab.label.split(' ')[0]}</span>
+                <span className="text-[9.5px] sm:text-[10px] mt-0.5 tracking-tight text-center leading-tight">{tab.label}</span>
               </button>
             );
           })}
