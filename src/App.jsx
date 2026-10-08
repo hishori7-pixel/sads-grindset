@@ -3081,6 +3081,38 @@ export default function App() {
             })}
           </nav>
         </div>
+
+        {/* Sidebar Footer: Streak + Level Progression */}
+        <div className="pt-4 border-t border-zinc-800/60 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-500 font-mono">Daily Streak</span>
+            <span className="flex items-center text-amber-400 font-bold font-mono">
+              <Flame className="w-3.5 h-3.5 mr-1 text-amber-500 fill-current" />
+              {state.streak} Days
+            </span>
+          </div>
+
+          {/* Level Progression Bar (Clickable to open milestones modal) */}
+          <div 
+            onClick={() => setRankModalOpen(true)}
+            className="space-y-1.5 bg-zinc-950/80 hover:bg-zinc-900 p-3 rounded-2xl border border-zinc-800/80 hover:border-violet-500/50 cursor-pointer transition-all group select-none"
+            title="Click to view study level milestones"
+          >
+            <div className="flex items-center justify-between text-[11px]">
+              <span className={`font-mono font-bold ${rankInfo.color} truncate`}>{rankInfo.current}</span>
+            </div>
+            <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-emerald-400 rounded-full transition-all duration-500" 
+                style={{ width: `${rankInfo.progress}%` }}
+              ></div>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+              <span>~{(state.xp / 600).toFixed(1)}h studied</span>
+              <span className="group-hover:text-violet-400">{rankInfo.progress}% to {rankInfo.nextRankTier}</span>
+            </div>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
