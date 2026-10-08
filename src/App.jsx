@@ -267,6 +267,7 @@ const SUBJECT_THEMES = {
     color: 'emerald',
     text: 'text-emerald-400',
     border: 'border-emerald-500/40',
+    borderLeft: 'border-l-emerald-500',
     bg: 'bg-emerald-500/10',
     ring: 'stroke-emerald-400',
     glow: 'shadow-[0_0_50px_rgba(16,185,129,0.35)]',
@@ -277,6 +278,7 @@ const SUBJECT_THEMES = {
     color: 'cyan',
     text: 'text-cyan-400',
     border: 'border-cyan-500/40',
+    borderLeft: 'border-l-cyan-500',
     bg: 'bg-cyan-500/10',
     ring: 'stroke-cyan-400',
     glow: 'shadow-[0_0_50px_rgba(6,182,212,0.35)]',
@@ -287,6 +289,7 @@ const SUBJECT_THEMES = {
     color: 'violet',
     text: 'text-violet-400',
     border: 'border-violet-500/40',
+    borderLeft: 'border-l-violet-500',
     bg: 'bg-violet-500/10',
     ring: 'stroke-violet-400',
     glow: 'shadow-[0_0_50px_rgba(139,92,246,0.35)]',
@@ -297,6 +300,7 @@ const SUBJECT_THEMES = {
     color: 'rose',
     text: 'text-rose-400',
     border: 'border-rose-500/40',
+    borderLeft: 'border-l-rose-500',
     bg: 'bg-rose-500/10',
     ring: 'stroke-rose-400',
     glow: 'shadow-[0_0_50px_rgba(244,63,94,0.35)]',
@@ -307,6 +311,7 @@ const SUBJECT_THEMES = {
     color: 'amber',
     text: 'text-amber-400',
     border: 'border-amber-500/40',
+    borderLeft: 'border-l-amber-500',
     bg: 'bg-amber-500/10',
     ring: 'stroke-amber-400',
     glow: 'shadow-[0_0_50px_rgba(245,158,11,0.35)]',
@@ -317,6 +322,7 @@ const SUBJECT_THEMES = {
     color: 'blue',
     text: 'text-blue-400',
     border: 'border-blue-500/40',
+    borderLeft: 'border-l-blue-500',
     bg: 'bg-blue-500/10',
     ring: 'stroke-blue-400',
     glow: 'shadow-[0_0_50px_rgba(59,130,246,0.35)]',
@@ -327,6 +333,7 @@ const SUBJECT_THEMES = {
     color: 'teal',
     text: 'text-teal-400',
     border: 'border-teal-500/40',
+    borderLeft: 'border-l-teal-500',
     bg: 'bg-teal-500/10',
     ring: 'stroke-teal-400',
     glow: 'shadow-[0_0_50px_rgba(20,184,166,0.35)]',
@@ -434,8 +441,16 @@ const mergeStates = (local, remote) => {
   });
   (remote.sessions || []).forEach(s => {
     const key = s.id || `${s.date}-${s.timestamp || 0}-${s.subject}-${s.duration}`;
-    if (!sessionMap.has(key)) {
+    const existing = sessionMap.get(key);
+    if (!existing) {
       sessionMap.set(key, s);
+    } else {
+      sessionMap.set(key, {
+        ...s,
+        ...existing,
+        notes: existing.notes || s.notes || '',
+        tags: existing.tags?.length ? existing.tags : (s.tags || [])
+      });
     }
   });
   const mergedSessions = Array.from(sessionMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -641,10 +656,12 @@ const reducer = (state, action) => {
       const newSession = {
         id: `sess-${Date.now()}`,
         subject: state.activeSubject,
-        topic: state.customTopic.trim() || `${state.activeSubject} Deep Session`,
+        topic: state.customTopic.trim() || `${state.activeSubject} Session`,
         duration,
         date: todayStr,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        notes: '',
+        tags: []
       };
 
       let newStreak = state.streak;
@@ -668,6 +685,22 @@ const reducer = (state, action) => {
         streak: newStreak,
         lastStudyDate: todayStr,
         xp: (state.xp || 0) + earnedXp
+      };
+    }
+
+    case 'UPDATE_SESSION_META': {
+      const { id, notes, tags } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(s =>
+          s.id === id
+            ? {
+                ...s,
+                notes: notes !== undefined ? notes : (s.notes || ''),
+                tags: tags !== undefined ? tags : (s.tags || [])
+              }
+            : s
+        )
       };
     }
 
@@ -1068,8 +1101,11 @@ const FocusEngine = ({ state, dispatch, onReward }) => {
 // ==========================================
 // MODULE 2: ANALYTICS & STATS (MULTI-TIMEFRAME ENGINE)
 // ==========================================
+const SESSION_TAG_PRESETS = ['#وزاري', '#حل_اسئلة', '#مراجعة', '#ملخص', '#امتحان'];
+
 const Analytics = ({ state, dispatch, onOpenRanks }) => {
   const [timeframe, setTimeframe] = useState('7d'); // '7d' | '30d' | '365d' | 'all'
+  const [expandedSessionId, setExpandedSessionId] = useState(null);
   const todayStr = getTodayStr();
   
   const todaySessions = state.sessions.filter(s => s.date === todayStr);
@@ -1108,6 +1144,17 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
     const nextIdx = (order.indexOf(timeframe) + 1) % order.length;
     setTimeframe(order[nextIdx]);
     soundEngine.play('click');
+  };
+
+  const toggleSessionTag = (sess, tag) => {
+    const currentTags = sess.tags || [];
+    const nextTags = currentTags.includes(tag)
+      ? currentTags.filter(t => t !== tag)
+      : [...currentTags, tag];
+    dispatch({
+      type: 'UPDATE_SESSION_META',
+      payload: { id: sess.id, tags: nextTags }
+    });
   };
 
   const rankInfo = getRankInfo(state.xp);
@@ -1235,10 +1282,23 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
                 strokeLinecap="round"
               />
             </svg>
-            <div className="flex flex-col items-center">
-              <span className="text-3xl font-mono font-bold text-zinc-100">{Math.round(todayProgress)}%</span>
-              <span className="text-[10px] text-zinc-500 uppercase mt-0.5">{targetHours.toFixed(1)}h Goal</span>
-            </div>
+            {todaySeconds === 0 ? (
+              <button
+                onClick={() => {
+                  soundEngine.play('click');
+                  dispatch({ type: 'SET_TAB', payload: 'focus' });
+                }}
+                className="z-10 px-3.5 py-2 rounded-xl bg-zinc-900/80 hover:bg-emerald-500/15 border border-zinc-700/70 hover:border-emerald-500/40 text-zinc-300 hover:text-emerald-300 text-xs font-medium transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Play className="w-3 h-3 fill-current text-emerald-400" />
+                <span>Start Session</span>
+              </button>
+            ) : (
+              <div className="flex flex-col items-center">
+                <span className="text-3xl font-mono font-bold text-zinc-100">{Math.round(todayProgress)}%</span>
+                <span className="text-[10px] text-zinc-500 uppercase mt-0.5">{targetHours.toFixed(1)}h Goal</span>
+              </div>
+            )}
           </div>
 
           <div className="w-full grid grid-cols-2 gap-2 text-center text-xs text-zinc-400 bg-zinc-950/70 p-3 rounded-2xl border border-zinc-800/80">
@@ -1279,25 +1339,37 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
           <div className="space-y-3.5 my-auto">
             {SUBJECTS.map(sub => {
               const time = subjectTimes[sub] || 0;
+              const loggedHrs = (time / 3600).toFixed(1);
+              const isZero = Number(loggedHrs) === 0;
               const perc = timeframeSeconds > 0 ? (time / timeframeSeconds) * 100 : 0;
               const theme = SUBJECT_THEMES[sub] || SUBJECT_THEMES.Math;
+              const periodDays = timeframe === '30d' ? 30 : timeframe === '365d' ? 365 : 7;
+              const plannedHrs = ((targetHours * periodDays) / SUBJECTS.length).toFixed(1);
+              const tooltipText = `Target: ${plannedHrs}h | Logged: ${loggedHrs}h`;
               
               return (
-                <div key={sub} className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
+                <div key={sub} className="space-y-1.5 group relative" title={tooltipText}>
+                  <div className={`flex justify-between text-xs transition-opacity ${isZero ? 'opacity-40' : ''}`}>
                     <span className="text-zinc-300 font-medium flex items-center gap-2">
                       <span className={`w-2.5 h-2.5 rounded-full ${theme.bar}`}></span>
-                      {sub}
+                      <span>{sub}</span>
+                      {isZero && (
+                        <span className="w-1 h-1 rounded-full bg-amber-400/50 shrink-0" />
+                      )}
                     </span>
                     <span className="text-zinc-400 font-mono">
-                      {(time / 3600).toFixed(1)}h <span className="text-zinc-600">({Math.round(perc)}%)</span>
+                      {loggedHrs}h <span className="text-zinc-600">({Math.round(perc)}%)</span>
                     </span>
                   </div>
-                  <div className="h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800/50">
+                  <div className="h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800/50 relative">
                     <div 
                       className={`h-full ${theme.bar} transition-all duration-700 rounded-full`} 
                       style={{ width: `${perc}%` }}
                     ></div>
+                  </div>
+                  {/* Hover Tooltip */}
+                  <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute -top-7 right-0 z-20 px-2 py-0.5 rounded-md bg-zinc-900/95 border border-zinc-700/80 text-[10px] font-mono text-zinc-200 shadow-lg whitespace-nowrap">
+                    {tooltipText}
                   </div>
                 </div>
               );
@@ -1315,20 +1387,74 @@ const Analytics = ({ state, dispatch, onOpenRanks }) => {
         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {state.sessions.map(sess => {
             const theme = SUBJECT_THEMES[sess.subject] || SUBJECT_THEMES.Math;
+            const isExpanded = expandedSessionId === sess.id;
+            const sessTags = sess.tags || [];
+            const sessNotes = sess.notes || '';
+            const earnedXp = Math.max(10, Math.floor((sess.duration || 0) / 60) * 10);
+
             return (
-              <div key={sess.id} className="flex items-center justify-between p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-xl text-xs">
-                <div className="flex items-center gap-3">
-                  <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] ${theme.pillActive}`}>
-                    {sess.subject}
-                  </span>
-                  <div>
-                    <div className="text-zinc-200 font-medium">{sess.topic}</div>
-                    <div className="text-zinc-500 text-[10px] font-mono">{sess.date}</div>
+              <div 
+                key={sess.id} 
+                onClick={() => setExpandedSessionId(prev => prev === sess.id ? null : sess.id)}
+                className={`bg-zinc-950/70 border border-zinc-800/80 border-l-4 ${theme.borderLeft} rounded-xl text-xs transition-all cursor-pointer hover:bg-zinc-900/50`}
+              >
+                {/* Default Slim Row */}
+                <div className="flex items-center justify-between p-3.5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] shrink-0 ${theme.pillActive}`}>
+                      {sess.subject}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-zinc-200 font-medium truncate">{sess.topic}</div>
+                      <div className="text-zinc-500 text-[10px] font-mono">{sess.date}</div>
+                    </div>
+                  </div>
+                  <div className="font-mono text-zinc-300 font-bold shrink-0 ml-3">
+                    {formatTime(sess.duration)}
                   </div>
                 </div>
-                <div className="font-mono text-zinc-300 font-bold">
-                  {formatTime(sess.duration)}
-                </div>
+
+                {/* Expandable Accordion Details (Session Notes & Tags) */}
+                {isExpanded && (
+                  <div 
+                    onClick={e => e.stopPropagation()} 
+                    className="px-3.5 pb-3.5 pt-2.5 border-t border-zinc-800/60 space-y-2.5 bg-zinc-950/90 rounded-b-xl animate-fade-in cursor-default"
+                  >
+                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                      <span>Session XP: <strong className="text-emerald-400">+{earnedXp} XP</strong></span>
+                      <span>{sess.timestamp ? new Date(sess.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : sess.date}</span>
+                    </div>
+
+                    {/* Tags Selector */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {SESSION_TAG_PRESETS.map(tag => {
+                        const active = sessTags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleSessionTag(sess, tag)}
+                            className={`px-2 py-0.5 rounded-md font-mono text-[10px] border transition-all ${active ? 'bg-violet-500/20 text-violet-300 border-violet-500/50 font-semibold' : 'bg-zinc-900/80 text-zinc-500 border-zinc-800 hover:text-zinc-300'}`}
+                          >
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Session Notes Input */}
+                    <input
+                      type="text"
+                      value={sessNotes}
+                      onChange={e => dispatch({
+                        type: 'UPDATE_SESSION_META',
+                        payload: { id: sess.id, notes: e.target.value }
+                      })}
+                      placeholder="Add session notes or reflections..."
+                      className="w-full bg-zinc-900/70 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2954,38 +3080,6 @@ export default function App() {
               );
             })}
           </nav>
-        </div>
-
-        {/* Sidebar Footer: Streak + Level Progression */}
-        <div className="pt-4 border-t border-zinc-800/60 space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-500 font-mono">Daily Streak</span>
-            <span className="flex items-center text-amber-400 font-bold font-mono">
-              <Flame className="w-3.5 h-3.5 mr-1 text-amber-500 fill-current" />
-              {state.streak} Days
-            </span>
-          </div>
-
-          {/* Level Progression Bar (Clickable to open milestones modal) */}
-          <div 
-            onClick={() => setRankModalOpen(true)}
-            className="space-y-1.5 bg-zinc-950/80 hover:bg-zinc-900 p-3 rounded-2xl border border-zinc-800/80 hover:border-violet-500/50 cursor-pointer transition-all group select-none"
-            title="Click to view study level milestones"
-          >
-            <div className="flex items-center justify-between text-[11px]">
-              <span className={`font-mono font-bold ${rankInfo.color} truncate`}>{rankInfo.current}</span>
-            </div>
-            <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-emerald-400 rounded-full transition-all duration-500" 
-                style={{ width: `${rankInfo.progress}%` }}
-              ></div>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-              <span>~{(state.xp / 600).toFixed(1)}h studied</span>
-              <span className="group-hover:text-violet-400">{rankInfo.progress}% to {rankInfo.nextRankTier}</span>
-            </div>
-          </div>
         </div>
       </aside>
 
